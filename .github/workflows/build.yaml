@@ -1,0 +1,46 @@
+name: Build and Push to Octopus
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore TodoList.sln
+
+    - name: Build
+      run: dotnet build TodoList.sln --no-restore
+
+    - name: Test
+      run: dotnet test TodoList.sln --no-build --verbosity normal
+
+    - name: Publish
+      run: dotnet publish TodoList/TodoList.csproj -c Release -o ./publish
+
+    - name: Install Octopus CLI
+      uses: octopusdeploy/install-octopus-cli-action@v1
+
+    - name: Pack
+      run: |
+        octo pack --id="TodoList" --version="1.0.${{ github.run_number }}" --format="Zip" --basePath="./publish" --outFolder="./artifacts"
+
+    - name: Push to Octopus
+      uses: octopusdeploy/push-package-action@v3
+      with:
+        packages: artifacts/TodoList.1.0.${{ github.run_number }}.zip
+        server: ${{ secrets.OCTOPUS_SERVER_URL }}
+        api_key: ${{ secrets.OCTOPUS_API_KEY }}
+        space: 'Default'
