@@ -11,17 +11,20 @@
 1. [Goals](#1-goals)
 2. [Project Structure](#2-project-structure)
 3. [Tech Stack](#3-tech-stack)
-4. [API Design](#4-api-design)
-5. [Agent-Native MCP Interface](#5-agent-native-mcp-interface)
-6. [Messaging — Wolverine](#6-messaging--wolverine)
-7. [Testing Strategy](#7-testing-strategy)
-8. [Observability](#8-observability)
-9. [Database Migration Strategy](#9-database-migration-strategy)
-10. [CI/CD Pipeline](#10-cicd-pipeline)
-11. [Deployment — Azure Container Apps](#11-deployment--azure-container-apps)
-12. [Backup and Recovery](#12-backup-and-recovery)
-13. [Infrastructure as Code](#13-infrastructure-as-code)
-14. [Agent Workflow](#14-agent-workflow)
+4. [Authentication](#4-authentication)
+5. [API Design](#5-api-design)
+6. [MCP.Tools — Standard MCP Interface](#6-mcptools--standard-mcp-interface)
+7. [MCP.Composite — Plan/Execute Interface](#7-mcpcomposite--planexecute-interface)
+8. [Domain Model](#8-domain-model)
+9. [Messaging — Wolverine](#9-messaging--wolverine)
+10. [Testing Strategy](#10-testing-strategy)
+11. [Observability](#11-observability)
+12. [Database Migration Strategy](#12-database-migration-strategy)
+13. [CI/CD Pipeline](#13-cicd-pipeline)
+14. [Deployment — Azure Container Apps](#14-deployment--azure-container-apps)
+15. [Backup and Recovery](#15-backup-and-recovery)
+16. [Infrastructure as Code](#16-infrastructure-as-code)
+17. [Agent Workflow](#17-agent-workflow)
 
 ---
 
@@ -44,7 +47,8 @@ This architecture prioritises:
 TodoList.sln
 ├── TodoList.Api/              # REST API — business logic, EF Core, Wolverine, SendGrid
 ├── TodoList.Web/              # Razor Pages UI — thin, optimistic updates, calls Api over HTTP
-├── TodoList.Mcp/              # Agent-Native server — Query/Execute endpoints, wraps Api
+├── TodoList.Mcp.Tools/        # Standard MCP server — official Anthropic SDK, one tool per capability
+├── TodoList.Mcp.Composite/    # Composite API — Plan/Execute endpoints, wraps Api
 ├── TodoList.AppHost/          # .NET Aspire orchestration — wires all services locally
 ├── TodoList.ServiceDefaults/  # Shared — OTel, health checks, resilience policies
 ├── TodoList.Tests/            # Unit tests — fast, in-memory, no I/O
@@ -57,7 +61,8 @@ TodoList.sln
 |---|---|---|
 | `Api` | Domain logic, DB, messaging, email, health endpoints | UI, agent interface |
 | `Web` | Razor Pages, optimistic UI, HTTP calls to Api | Business logic, data |
-| `Mcp` | Query/Execute endpoints, intent mapping | Domain logic (delegates to Api) |
+| `Mcp.Tools` | Standard MCP tools (official SDK), one tool per capability | Domain logic (delegates to Api) |
+| `Mcp.Composite` | Plan/Execute endpoints, `$result[N]` chaining | Domain logic (delegates to Api) |
 | `AppHost` | Local service wiring, resource definitions | Any runtime logic |
 | `ServiceDefaults` | OTel registration, health check conventions, resilience | App-specific code |
 | `Tests` | Unit coverage of all domain logic and message handlers | Any real I/O |
@@ -65,7 +70,8 @@ TodoList.sln
 
 ### Rationale for separate projects
 
-- `Api`, `Web`, `Mcp` are separate deployables — they run as independent Container Apps
+- `Api`, `Web`, `Mcp.Tools`, `Mcp.Composite` are separate deployables — they run as independent Container Apps
+- Agents choose which agent-native interface to install: `Mcp.Tools` for interactive/conversational use (Claude Desktop, Claude Code), `Mcp.Composite` for agentic loops that want to minimise round trips
 - `AppHost` is a hard requirement of .NET Aspire
 - `ServiceDefaults` prevents OTel and health check wiring being duplicated across three service projects
 - `IntegrationTests` is separate from `Tests` so CI can run unit tests fast first (< 2 seconds) and integration tests separately (requires Docker)
@@ -92,15 +98,59 @@ TodoList.sln
 | Integration test infra | Testcontainers for .NET | Latest stable |
 | HTTP stubbing | WireMock.NET | Latest stable |
 | CLI generation | Kiota (Microsoft) | Latest stable |
+| Authentication | ASP.NET Core Identity | 8.0 |
+| Social login | Google OAuth 2.0, GitHub OAuth | — |
 | IaC (core) | Bicep via .NET Aspire + azd | — |
 | IaC (overlay) | Pulumi C# | Latest stable |
 | CI | GitHub Actions | — |
-| Deployment orchestration | Octopus Deploy | — |
+| Deployment orchestration | Octopus Deploy (Cloud/SaaS) | — |
 | Hosting | Azure Container Apps (Consumption plan) | — |
 
 ---
 
-## 4. API Design
+## 4. Authentication
+
+### Social login
+
+Users authenticate via Google or GitHub OAuth. ASP.NET Core Identity manages the local user record; the OAuth providers handle credential storage and MFA.
+
+```csharp
+builder.Services.AddAuthentication()
+    .AddGoogle(options => {
+        options.ClientId     = config["Auth:Google:ClientId"];
+        options.ClientSecret = config["Auth:Google:ClientSecret"];
+    })
+    .AddGitHub(options => {
+        options.ClientId     = config["Auth:GitHub:ClientId"];
+        options.ClientSecret = config["Auth:GitHub:ClientSecret"];
+    });
+```
+
+On first login, an ASP.NET Core Identity user record is created and linked to the provider claim. Subsequent logins from the same provider update the linked record — no duplicate users.
+
+### Identity storage
+
+ASP.NET Core Identity tables live in the same Azure SQL database as the application data, managed by a separate EF Core `IdentityDbContext`. The schema is created by EF migrations alongside application migrations.
+
+### Agent / service access (API keys)
+
+Human users authenticate via cookie (set by the Web project). Machine callers — agents using `Mcp.Tools`, `Mcp.Composite`, or the raw REST API — authenticate via a pre-shared API key passed as a bearer token:
+
+```
+Authorization: Bearer {api-key}
+```
+
+API keys are stored as hashed values in the `ApiKeys` table and provisioned via the `todocli` admin surface or directly in the database during infrastructure setup. Keys are scoped to a role (`read`, `write`, `admin`) and expire on a configurable TTL.
+
+### Route protection
+
+- Web project: standard cookie-based `[Authorize]` — unauthenticated users are redirected to the login page
+- Api project: `[Authorize]` using either cookie (for browser-initiated calls from Web) or bearer token (for agents and CLI)
+- `Mcp.Tools`, `Mcp.Composite`: bearer token only — no browser session involved
+
+---
+
+## 5. API Design
 
 ### Async command pattern
 
@@ -157,13 +207,53 @@ The Web project updates its local UI state immediately on user action without wa
 
 ---
 
-## 5. Agent-Native MCP Interface
+## 6. Mcp.Tools — Standard MCP Interface
 
-`TodoList.Mcp` is a separate deployable project that provides an agent-native interface to the todo domain. It wraps `TodoList.Api` over HTTP (via Aspire service discovery) and exposes two endpoints:
+`TodoList.Mcp.Tools` is a separate deployable that exposes the todo domain via the official [Anthropic MCP SDK](https://github.com/anthropics/anthropic-sdk-dotnet). It is protocol-compliant and works with any MCP-compatible client: Claude Desktop, Claude Code, or any agent that speaks standard MCP.
 
-### `POST /query`
+### Tools exposed
 
-Agents discover capabilities on demand. Returns structured descriptions, schemas, and examples. Keeps agent context small — load only what you need.
+Each capability is a discrete MCP tool with a typed schema. The MCP SDK auto-generates the JSON Schema from C# types:
+
+| Tool | Description |
+|---|---|
+| `create_todo` | Create a new todo item |
+| `list_todos` | List all todos with optional filter |
+| `complete_todo` | Mark a todo as complete |
+| `delete_todo` | Delete a todo |
+| `get_operation` | Poll an async operation by ID |
+
+### Tool pattern
+
+Each tool call maps to one API call. The tool returns the result directly — including the `operationId` from async endpoints, which the client can poll via `get_operation`. One tool call at a time.
+
+```csharp
+[McpTool("create_todo", Description = "Create a new todo item")]
+public async Task<CreateTodoResult> CreateTodoAsync(
+    [McpToolParam("title", Description = "Todo title (required, max 500 chars)")] string title)
+{
+    var response = await _apiClient.PostAsync("/todos", new { title });
+    // returns { id, operationId, retryAfterMs }
+}
+```
+
+### When to use Mcp.Tools
+
+- Interactive agents: Claude Desktop, Claude Code — where the host manages tool calls step by step
+- Agents that prefer one-tool-at-a-time control flow
+- Clients that only speak standard MCP protocol
+
+---
+
+## 7. Mcp.Composite — Plan/Execute Interface
+
+`TodoList.Mcp.Composite` is a separate deployable that implements the **Composite API** pattern. It exposes two endpoints (`POST /plan` and `POST /execute`) that allow agents to discover capabilities and then execute multi-step plans in a single round trip.
+
+This is the canonical pattern name from Salesforce's API design. The two-phase approach minimises round trips for agentic loops: discover once, execute as a composed plan.
+
+### `POST /plan`
+
+Agents discover capabilities on demand. Returns structured descriptions, schemas, and examples for a stated intent. Keeps agent context small — load only what you need.
 
 ```json
 // Request
@@ -176,13 +266,13 @@ Agents discover capabilities on demand. Returns structured descriptions, schemas
       "name": "create_todo",
       "description": "Creates a new todo item",
       "parameters": { "title": "string (required)" },
-      "returns": "operation_id"
+      "returns": "{ id, operationId, retryAfterMs }"
     },
     {
       "name": "complete_todo",
       "description": "Marks a todo as complete",
       "parameters": { "id": "integer (required)" },
-      "returns": "operation_id"
+      "returns": "{ operationId, retryAfterMs }"
     }
   ],
   "schemas": {
@@ -203,7 +293,7 @@ Agents discover capabilities on demand. Returns structured descriptions, schemas
 
 ### `POST /execute`
 
-Agents submit a batch of composed operations in a single call. References to earlier results in the same batch are supported via `$result[N].field` syntax. One round trip for a multi-step plan.
+Agents submit a composed plan of operations in a single call. References to earlier results in the same plan are supported via `$result[N].field` syntax. One round trip for a multi-step plan.
 
 ```json
 // Request
@@ -228,11 +318,11 @@ Agents submit a batch of composed operations in a single call. References to ear
 
 **Error handling for `$result[N].field` references:**
 
-If an upstream operation fails, all downstream operations that reference its result are skipped and appear in `failed` with `reason: "dependency_failed"`:
+If an upstream operation fails, all downstream operations that reference its result are skipped and appear in `failed` with `reason: "dependency_failed"`. Operations with no dependency on the failed operation continue to execute:
 
 ```json
-// Request had 3 operations: create_todo (0), complete_todo referencing $result[0].id (1), list_todos (2)
-// Operation 0 fails — operation 1 depends on it and is skipped — operation 2 has no dependency and runs
+// Request: create_todo (0), complete_todo referencing $result[0].id (1), list_todos (2)
+// Operation 0 fails → operation 1 skipped → operation 2 has no dependency and runs
 
 {
   "results": [
@@ -245,11 +335,107 @@ If an upstream operation fails, all downstream operations that reference its res
 }
 ```
 
-Operations that do not reference a failed operation continue to execute. The batch does not halt on first failure — only dependent operations are skipped. Results appear in `results` at their original index position regardless of execution order.
+The plan does not halt on first failure — only dependent operations are skipped. Results appear at their original index regardless of execution order.
+
+### When to use Mcp.Composite
+
+- Agentic loops that want to minimise round trips
+- Agents running headless pipelines where every HTTP call has a cost
+- Multi-step workflows with known dependencies between operations
 
 ---
 
-## 6. Messaging — Wolverine
+## 8. Domain Model
+
+### Philosophy
+
+All domain behavior lives on the aggregate. Handlers are pure orchestration: load → call domain method → save → publish events. No business logic in handlers.
+
+### `DomainResult<T>`
+
+Domain methods never throw on invalid transitions. They collect all validation errors and return them without changing state:
+
+```csharp
+public sealed class DomainResult<T>
+{
+    private DomainResult(T value)         { Value = value; Errors = []; }
+    private DomainResult(string[] errors) { Value = default; Errors = errors; }
+    public T? Value { get; }
+    public string[] Errors { get; }
+    public bool IsSuccess => Errors.Length == 0;
+    public static DomainResult<T> Ok(T value)                  => new(value);
+    public static DomainResult<T> Fail(params string[] errors) => new(errors);
+}
+```
+
+### Aggregate pattern
+
+`Todo.Create` is a static factory method — the only way to produce a valid `Todo`. Instance methods advance state and return the events that resulted from the transition:
+
+```csharp
+public static DomainResult<(Todo todo, IReadOnlyList<IDomainEvent> events)> Create(
+    string title, DateTimeOffset now)
+{
+    var errors = new List<string>();
+    if (string.IsNullOrWhiteSpace(title)) errors.Add("Title cannot be empty");
+    if (title?.Length > 500)             errors.Add("Title cannot exceed 500 characters");
+    if (errors.Count > 0)
+        return DomainResult<(Todo, IReadOnlyList<IDomainEvent>)>.Fail([..errors]);
+
+    var todo = new Todo { Id = Guid.NewGuid(), Title = title!.Trim(), CreatedAt = now };
+    return DomainResult<(Todo, IReadOnlyList<IDomainEvent>)>.Ok(
+        (todo, [new TodoCreatedEvent(todo.Id, todo.Title, now)]));
+}
+
+public DomainResult<IReadOnlyList<IDomainEvent>> Complete(DateTimeOffset now)
+{
+    var errors = new List<string>();
+    if (IsDeleted)   errors.Add("Cannot complete a deleted todo");
+    if (IsCompleted) errors.Add("Already completed");
+    if (errors.Count > 0)
+        return DomainResult<IReadOnlyList<IDomainEvent>>.Fail([..errors]);
+
+    IsCompleted = true;
+    CompletedAt = now;
+    return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoCompletedEvent(Id, now)]);
+}
+
+public DomainResult<IReadOnlyList<IDomainEvent>> Uncomplete()
+{
+    if (!IsCompleted)
+        return DomainResult<IReadOnlyList<IDomainEvent>>.Fail("Not completed");
+
+    IsCompleted = false;
+    CompletedAt = null;
+    return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoUncompletedEvent(Id)]);
+}
+```
+
+### Handler pattern
+
+Handlers are thin orchestrators. They call the domain method and dispatch the returned events:
+
+```csharp
+public async Task Handle(CompleteTodoCommand cmd, IMessageBus bus)
+{
+    var todo = await _repo.GetAsync(cmd.TodoId);
+    var result = todo.Complete(DateTimeOffset.UtcNow);
+    if (!result.IsSuccess)
+        throw new ValidationException(result.Errors);
+
+    await _repo.SaveAsync(todo);
+    foreach (var evt in result.Value!)
+        await bus.PublishAsync(evt);
+}
+```
+
+### Events as first-class values
+
+Domain events are returned from domain methods — not collected as side effects on the aggregate. This makes them directly testable as values. Handlers are responsible for dispatching them via Wolverine.
+
+---
+
+## 9. Messaging — Wolverine
 
 ### Message flow
 
@@ -275,24 +461,61 @@ Wolverine retries with exponential backoff before moving to the dead-letter queu
 
 ---
 
-## 7. Testing Strategy
+## 10. Testing Strategy
 
 ### Philosophy
 
-In-memory by default, real infrastructure at the boundary.
+In-memory by default, real infrastructure at the boundary. All domain behavior is exercised through the domain model directly — never through static helpers or handlers.
 
-### Unit tests (`TodoList.Tests/unit/`)
+### Unit tests (`TodoList.Tests/`)
 
-- Test domain logic through `TodoService` directly
-- No EF Core — `TodoService` depends on a repository interface; unit tests inject a `FakeTodoRepository` that returns known data
-- Wolverine test harness for message handler verification — no real transport:
+Tests exercise the domain model through valid state transitions. The model can only be reached via its static factory or its own methods — this mirrors real usage and keeps tests refactor-friendly:
+
+```csharp
+[Fact]
+public void Uncomplete_after_complete_returns_uncompleted_event()
+{
+    var todo = Todo.Create("buy milk", DateTimeOffset.UtcNow).Value!.todo;
+    todo.Complete(DateTimeOffset.UtcNow);
+
+    var result = todo.Uncomplete();
+
+    result.IsSuccess.Should().BeTrue();
+    result.Value.Should().ContainSingle().Which.Should().BeOfType<TodoUncompletedEvent>();
+    todo.IsCompleted.Should().BeFalse();
+}
+
+[Fact]
+public void Create_with_empty_title_returns_error_without_changing_state()
+{
+    var result = Todo.Create("", DateTimeOffset.UtcNow);
+
+    result.IsSuccess.Should().BeFalse();
+    result.Errors.Should().Contain("Title cannot be empty");
+}
+
+[Fact]
+public void Complete_already_completed_todo_returns_error()
+{
+    var todo = Todo.Create("buy milk", DateTimeOffset.UtcNow).Value!.todo;
+    todo.Complete(DateTimeOffset.UtcNow);
+
+    var result = todo.Complete(DateTimeOffset.UtcNow);
+
+    result.IsSuccess.Should().BeFalse();
+    result.Errors.Should().Contain("Already completed");
+}
+```
+
+- No EF Core, no repository — domain model is a pure in-memory object
+- Wolverine test harness for message handler routing — no real transport:
 
 ```csharp
 var session = await Host.InvokeMessageAndWaitAsync(new TodoCreatedEvent(todo));
 session.Sent.SingleMessage<SendEmailCommand>().Should().NotBeNull();
 ```
 
-- WireMock.NET in `TodoList.Tests/unit/` for testing that the right HTTP call is made to SendGrid without real credentials
+- WireMock.NET for testing that the right HTTP call is made to SendGrid without real credentials
 - All tests run in < 2 seconds
 - Agent workflow: `dotnet test --filter Category=Unit` after every change
 
@@ -316,11 +539,11 @@ Both test suites emit JUnit XML artifacts consumed by CI. Individual test failur
 
 ---
 
-## 8. Observability
+## 11. Observability
 
 ### Signal types
 
-All three service projects (`Api`, `Web`, `Mcp`) register OTel via `ServiceDefaults`:
+All four service projects (`Api`, `Web`, `Mcp.Tools`, `Mcp.Composite`) register OTel via `ServiceDefaults`:
 
 - **Traces:** every HTTP request, DB query, Service Bus message, and outbound HTTP call is a span. A single browser click produces a distributed trace: Web → Api → Wolverine → SendGrid
 - **Metrics:** request rates, queue depth, DB query duration, operation polling durations, email delivery latency
@@ -387,7 +610,7 @@ If a deployment causes `completion_rate` to drop or `time_to_completion` to spik
 
 ---
 
-## 9. Database Migration Strategy
+## 12. Database Migration Strategy
 
 ### Core principles
 
@@ -923,7 +1146,7 @@ App: dual-writes `Title`+`Summary` AND writes `Priority` (no old column for Prio
 
 ---
 
-## 10. CI/CD Pipeline
+## 13. CI/CD Pipeline
 
 ### Trigger
 
@@ -946,7 +1169,8 @@ All branches on push. Deployment stages only run on the main branch.
 │   Runs only if Stage 1 passes.                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │ Stage 3 — Build & Publish                                       │
-│   dotnet publish → Docker images for Api, Web, Mcp              │
+│   dotnet publish → Docker images for Api, Web, Mcp.Tools,       │
+│                    Mcp.Composite                                 │
 │   Pushes images to Azure Container Registry                     │
 │   Output: build metadata JSON { sha, version, images[], time }  │
 ├─────────────────────────────────────────────────────────────────┤
@@ -993,7 +1217,7 @@ All branches on push. Deployment stages only run on the main branch.
 
 1. Pipeline halts
 2. GitHub Issue opened automatically with: failed stage, structured error output, traces for the failure window, current `/health/detail` output
-3. Recovery agent triggered (see Section 12)
+3. Recovery agent triggered (see Section 15)
 4. Out-of-band alert sent via SendGrid email
 5. **No automatic rollback.** If a migration ran, rollback is not safe. Team moves forward.
 
@@ -1010,7 +1234,7 @@ Agents use this to understand exactly which stage failed and why, without parsin
 
 ---
 
-## 11. Deployment — Azure Container Apps
+## 14. Deployment — Azure Container Apps
 
 ### Configuration
 
@@ -1048,11 +1272,11 @@ az containerapp revision deactivate --revision app--v2
 
 ### Octopus Deploy integration
 
-Octopus Deploy orchestrates Container Apps deployments via the Azure CLI community step template and/or "Run a Script" steps with the Azure CLI. No native Container Apps step exists in Octopus; the az CLI commands above are parameterised as Octopus variables.
+Octopus Deploy Cloud (SaaS) orchestrates Container Apps deployments via the Azure CLI community step template and/or "Run a Script" steps with the Azure CLI. No native Container Apps step exists in Octopus; the az CLI commands above are parameterised as Octopus variables.
 
 ---
 
-## 12. Backup and Recovery
+## 15. Backup and Recovery
 
 ### Azure SQL automated backups
 
@@ -1123,7 +1347,7 @@ All commands are generated by the recovery agent with real resource names and ti
 
 ---
 
-## 13. Infrastructure as Code
+## 16. Infrastructure as Code
 
 ### Split ownership
 
@@ -1161,7 +1385,7 @@ A dedicated IaC brainstorm and spec will cover:
 
 ---
 
-## 14. Agent Workflow
+## 17. Agent Workflow
 
 ### During development (TDD loop)
 
@@ -1209,13 +1433,13 @@ az monitor metrics list \
   --filter "version eq 'abc123'"
 ```
 
-### MCP interface for direct agent operation
+### Mcp.Composite interface for direct agent operation
 
 ```bash
-# Discover what the system can do
-POST /query { "about": "how do I create and complete a todo?" }
+# Discover capabilities for a stated intent (Mcp.Composite)
+POST /plan { "about": "how do I create and complete a todo?" }
 
-# Execute a multi-step plan in one call
+# Execute a multi-step plan in one call (Mcp.Composite)
 POST /execute {
   "operations": [
     { "op": "create_todo", "params": { "title": "verify deployment" } },
@@ -1224,7 +1448,7 @@ POST /execute {
 }
 
 # Verify business state after deployment
-POST /query { "about": "what are the current completion metrics?" }
+POST /plan { "about": "what are the current completion metrics?" }
 ```
 
 ### Recovery scenario
