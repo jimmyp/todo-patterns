@@ -144,7 +144,12 @@ todocli todos complete --id 42
 todocli operations get --id abc123
 ```
 
-Agents can use this CLI directly without understanding the HTTP schema. The CLI is published as a build artifact on every CI run.
+Agents can use this CLI directly without understanding the HTTP schema. The CLI is published as a build artifact on every CI run. Agents and automation workflows that need `todocli` download it from the CI artifact before use:
+
+```bash
+gh run download {run-id} --name todocli --dir ./bin
+chmod +x ./bin/todocli
+```
 
 ### Optimistic updates in the Web project
 
@@ -220,6 +225,23 @@ Agents submit a batch of composed operations in a single call. References to ear
   "failed": []
 }
 ```
+
+**Error handling for `$result[N].field` references:**
+
+If an upstream operation fails, all downstream operations that reference its result are skipped and appear in `failed` with `reason: "dependency_failed"`:
+
+```json
+// If operation 0 fails:
+{
+  "results": [],
+  "failed": [
+    { "index": 0, "status": "failed", "reason": "validation_error", "detail": "Title is required" },
+    { "index": 1, "status": "skipped", "reason": "dependency_failed", "dependency_index": 0 }
+  ]
+}
+```
+
+Operations that do not reference a failed operation continue to execute. The batch does not halt on first failure — only dependent operations are skipped.
 
 ---
 
@@ -311,9 +333,12 @@ OTLP exporter sends all signals to Azure Monitor / Application Insights. Agents 
 ### Health endpoints (on every service project)
 
 ```
-GET /health/live    → 200 if process is running (liveness probe)
-GET /health/ready   → 200 if DB connected, Service Bus reachable, all deps healthy
-GET /health/detail  → 200 {
+GET /health/live       → 200 if process is running (liveness probe)
+GET /health/ready      → 200 if DB connected, Service Bus reachable, all deps healthy
+GET /health/migrations → 200 { backfills: [...], pending_contracts: [...] }
+                         Lightweight endpoint for agents and CI to check migration state
+                         without the full /health/detail payload.
+GET /health/detail     → 200 {
                           version: "1.0.42",
                           build: "abc123",
                           db: "ok",
@@ -380,7 +405,7 @@ A runtime constant default is any expression that produces the same value for al
 
 **References:**
 - EF Core wraps each migration in a transaction by default. All SQL in `Up()` runs inside one transaction — row locks accumulate. At 5,000 locks, SQL Server escalates to a table-level exclusive lock. `ROWLOCK` hints do not prevent this. Source: [SQL Server lock escalation](https://learn.microsoft.com/troubleshoot/sql/database-engine/performance/resolve-blocking-problems-caused-lock-escalation)
-- `suppressTransaction: true` on `migrationBuilder.Sql()` is designed for DDL that databases refuse to run inside a transaction (memory-optimised tables, collation changes). It is not designed for large DML and must be isolated in its own migration. Source: [EF Core managing migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/managing)
+- `suppressTransaction: true` on `migrationBuilder.Sql()` is designed for DDL that databases refuse to run inside a transaction (memory-optimised tables, collation changes) and must be isolated in its own migration. It must NOT be used as a general-purpose performance shortcut for large DML (this would create partial data state and mis-use the primitive). It is acceptable for small, bounded DML backfills (< 10,000 rows) where the purpose is identical: preventing lock accumulation inside the migration transaction. The distinction is bounded vs. unbounded, not DDL vs. DML. Source: [EF Core managing migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/managing). EF Core source confirmation that the `__EFMigrationsHistory` INSERT is also suppressed when any operation uses `suppressTransaction: true`: [MigrationCommandExecutor.cs](https://github.com/dotnet/efcore/blob/main/src/EFCore.Relational/Migrations/Internal/MigrationCommandExecutor.cs)
 - EF Core 9 wraps all pending migrations in a single transaction. Source: [EF Core 9 breaking changes](https://learn.microsoft.com/ef/core/what-is-new/ef-core-9.0/breaking-changes)
 - Microsoft recommends SQL scripts (not `MigrateAsync()` at runtime) for production migrations. Source: [Applying migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/applying)
 - Azure SQL has Optimised Locking enabled by default, which reduces lock escalation risk. It does not eliminate it inside long-running transactions. Source: [Optimised Locking](https://learn.microsoft.com/sql/relational-databases/performance/optimized-locking)
@@ -434,10 +459,15 @@ IF NOT EXISTS (...) ALTER TABLE Todos ADD Summary NVARCHAR(200) NULL;
   "new_column": "Summary",
   "table": "Todos",
   "backfill_goal": 500,
+  "backfill_safety_multiplier": 3,
   "deployed_at": "2026-03-21T14:00:00Z",
   "contract_eligible_after": "2026-03-23T14:00:00Z"
 }
 ```
+
+`backfill_safety_multiplier` defaults to `3`. The contract migration's safety check is `@@ROWCOUNT > backfill_goal * backfill_safety_multiplier`. A value of 3 allows for a reasonable burst of write activity between gate check and contract execution while still catching a broken dual-write (which would produce an order-of-magnitude larger row count). Increase for high-write-volume tables; decrease to tighten the check.
+
+`backfill_goal: 0` is valid for small tables where the inline `suppressTransaction` backfill migration guarantees processing all existing rows before the app deploys. Since new rows are always dual-written, `remaining` reaches and stays at 0 after the backfill migration runs, making the gate achievable.
 
 **Table size classification (read from `/health/detail` on production before migration PR merges):**
 - `rows < 10,000` → inline backfill in Phase 2 migration (single UPDATE with `suppressTransaction: true`, isolated migration)
@@ -470,7 +500,9 @@ public interface IBackfillJob
 }
 ```
 
-Progress stored in `__BackfillProgress` table — survives app restarts. Exposed via `/health/detail`:
+`ExecuteBatchAsync` uses `WHERE NewColumn IS NULL` with an index on the new column to find the next batch — not `OFFSET`. `OFFSET` performs an O(N) scan of all preceding rows on each call, which becomes progressively slower on large tables. `WHERE NewColumn IS NULL` with an index is O(remaining) on every call and scales correctly.
+
+Progress stored in `__BackfillProgress` table — survives app restarts. Exposed via `/health/detail` and the dedicated `/health/migrations` endpoint:
 ```json
 "backfills": [{
   "migration": "Add_Summary_Column",
@@ -674,7 +706,7 @@ The following scenarios validate that the design is correct end-to-end. Each tra
 2. WHILE loop: `UPDATE TOP(1000) Todos SET Summary = Title WHERE Summary IS NULL` → 0 rows updated (all already done)
 3. Loop exits immediately (idempotent via `WHERE Summary IS NULL`)
 4. History INSERT: runs successfully this time ✅
-5. `lifecycle.json` confirmed: `{ phase: "backfill_complete" }` ✅
+5. `lifecycle.json`: unchanged — still `{ phase: "expand" }`. Phase only advances to `"complete"` when the contract migration runs. The backfill pct visible in `/health/migrations` now shows `pct: 100, remaining: 0`. ✅
 
 **Result:** ✅ `WHERE` clause idempotency makes the retry trivially safe.
 
@@ -693,9 +725,10 @@ The following scenarios validate that the design is correct end-to-end. Each tra
 
 **On restart:**
 1. `BackfillHostedService` starts, reads `__BackfillProgress`
-2. Finds `last_batch: 500` → resumes from batch 501 ✅
-3. No rows are double-processed (batch query uses `OFFSET`/`WHERE Summary IS NULL` — both approaches are safe)
+2. Finds `processed: 500000` → resumes using `WHERE Summary IS NULL` (not OFFSET — see batch strategy above)
+3. No rows are double-processed — rows already backfilled have `Summary IS NOT NULL` and are excluded by the WHERE clause ✅
 4. Progress continues from 500,000 to 2,000,000
+5. `lifecycle.json`: unchanged — still `{ phase: "expand", backfill_goal: 1000 }`. `/health/migrations` shows updated `pct` as backfill progresses. ✅
 
 **Result:** ✅ Checkpoint-based resume. No data loss. No user impact.
 
@@ -712,7 +745,10 @@ The following scenarios validate that the design is correct end-to-end. Each tra
 **At contract time:**
 1. Final UPDATE finds ≤ 743 rows (pool has only shrunk since the gate check)
 2. `@@ROWCOUNT ≤ backfill_goal` ✅
-3. Contract completes
+3. `@@ROWCOUNT ≤ backfill_goal * backfill_safety_multiplier (3000)` ✅ safety check passes
+4. Contract completes. Transaction commits.
+5. `lifecycle.json`: updated to `{ phase: "complete" }` ✅
+6. `/health/migrations`: `pending_contracts: []`, `backfills: []` ✅
 
 **Result:** ✅ Dual-write guarantee makes the pool monotonically decreasing.
 
@@ -734,11 +770,14 @@ The following scenarios validate that the design is correct end-to-end. Each tra
 - App: still dual-writing both columns, still reading `Title` ✅
 - Users: zero impact — `Title` always has current data ✅
 
+**`lifecycle.json` state throughout:** unchanged — still `{ phase: "expand" }`. Phase only advances to `"complete"` when the contract transaction commits and history is written. `/health/migrations` still shows the pending contract.
+
 **Retry (after fixing the FK constraint):**
 1. Idempotent final UPDATE: 743 rows (same rows as before, `WHERE Summary IS NULL` since they were rolled back) ✅
 2. Idempotent `ALTER COLUMN NOT NULL`: checks current nullability, applies if nullable ✅
 3. Idempotent `DROP COLUMN`: `IF EXISTS (...) DROP COLUMN Title` ✅
 4. Transaction commits. History written. ✅
+5. `lifecycle.json`: updated to `{ phase: "complete" }` ✅
 
 **Result:** ✅ Fully transactional contract means clean rollback. Idempotent DDL makes retry safe.
 
@@ -755,9 +794,11 @@ The following scenarios validate that the design is correct end-to-end. Each tra
 4. `__EFMigrationsHistory`: NOT written
 5. App: still dual-writing (what it can), reading `Title` ✅
 
+**`lifecycle.json` state:** unchanged — still `{ phase: "expand" }`. The RAISERROR causes the transaction to roll back; the history INSERT never runs. The contract has not advanced. `/health/migrations` still shows the pending contract with `remaining: 5343`.
+
 **Automatic response:**
-1. Pipeline Stage 4 fails
-2. GitHub Issue opened: "Contract safety check failed — 5,343 unmigrated rows found, goal was 1,000. Likely dual-write bug. Investigate write paths for Summary column."
+1. Pipeline Stage 4 (migration step) fails
+2. GitHub Issue opened: "Contract safety check failed — 5,343 unmigrated rows found, goal was 1,000 (multiplier: 3x = 3,000). Likely dual-write bug. Investigate write paths for Summary column."
 3. Recovery agent notified out-of-band via SendGrid email
 4. Recovery agent analyses the traces for the failure window, identifies the code path that skipped dual-write, drafts a fix PR
 
@@ -897,10 +938,14 @@ All branches on push. Deployment stages only run on the main branch.
 │   Output: build metadata JSON { sha, version, images[], time }  │
 ├─────────────────────────────────────────────────────────────────┤
 │ Stage 4 — Database Migrations          [main branch only]       │
-│   dotnet ef database update                                     │
-│   Runs against production DB while current app serves traffic   │
-│   Only DDL — fast, transactional, safe                          │
-│   Updates lifecycle.json if new expand/contract cycle begins    │
+│   dotnet ef migrations script --idempotent --output migrate.sql │
+│   sqlcmd -S $SERVER -d $DB -i migrate.sql                       │
+│   Generates idempotent SQL script and applies via sqlcmd.       │
+│   Never uses dotnet ef database update / MigrateAsync() in      │
+│   production — per Microsoft guidance (applying-migrations).    │
+│   Runs against production DB while current app serves traffic.  │
+│   Only DDL — fast, transactional, safe.                         │
+│   Updates lifecycle.json if new expand/contract cycle begins.   │
 │   Output: migration result JSON { applied[], duration_ms }      │
 ├─────────────────────────────────────────────────────────────────┤
 │ Stage 5 — Deploy to Green Revision     [main branch only]       │
@@ -1038,8 +1083,11 @@ The agent surfaces these as options with complete commands. You approve each ste
 ### Data restore flow (if required)
 
 ```
-1. Enable maintenance mode
-   az webapp config appsettings set --settings MAINTENANCE_MODE=true
+1. Enable maintenance mode (Container Apps: route all traffic to a static maintenance revision)
+   az containerapp ingress traffic set \
+     --name app-todolist \
+     --resource-group rg-todolist \
+     --label-weight production=0 maintenance=100
 
 2. Restore DB to last known good point
    az sql db restore \
