@@ -153,7 +153,7 @@ chmod +x ./bin/todocli
 
 ### Optimistic updates in the Web project
 
-The Web project updates its local UI state immediately on user action without waiting for the operation to reach `complete`. It polls the operation endpoint in the background using the `Retry-After` value and reconciles if the operation fails.
+The Web project updates its local UI state immediately on user action without waiting for the operation to reach `complete`. It polls the operation endpoint in the background using the `X-Retry-After-Ms` value and reconciles if the operation fails.
 
 ---
 
