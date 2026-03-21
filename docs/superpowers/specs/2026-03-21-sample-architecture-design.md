@@ -109,16 +109,16 @@ All mutating operations follow the async command pattern. The API never makes th
 ```
 POST   /todos                          → 202 Accepted
                                          Location: /todos/operations/{operationId}
-                                         Retry-After: {milliseconds}
+                                         X-Retry-After-Ms: {milliseconds}
 
 GET    /todos/operations/{operationId} → 200 { status, result? }
 GET    /todos                          → 200 [...]
 GET    /todos/{id}                     → 200 { id, title, isCompleted, createdAt, completedAt? }
-POST   /todos/{id}/complete            → 202 + Location + Retry-After
-DELETE /todos/{id}                     → 202 + Location + Retry-After
+POST   /todos/{id}/complete            → 202 + Location + X-Retry-After-Ms
+DELETE /todos/{id}                     → 202 + Location + X-Retry-After-Ms
 ```
 
-**`Retry-After` calculation:** The Api queries Service Bus queue depth at response time and returns a recommended polling interval in milliseconds. Clients treat this as a hard instruction, not a suggestion.
+**`X-Retry-After-Ms` header:** A custom header (not the standard RFC 7231 `Retry-After`) because we need millisecond precision and RFC 7231 defines `Retry-After` in whole seconds. Using the standard header with millisecond values would cause standard HTTP clients to misinterpret the value by a factor of 1000. The Api queries Service Bus queue depth at response time and returns a recommended polling interval. Clients treat this as a hard instruction, not a suggestion.
 
 ```
 queue depth 0–10:    200ms
@@ -231,9 +231,13 @@ Agents submit a batch of composed operations in a single call. References to ear
 If an upstream operation fails, all downstream operations that reference its result are skipped and appear in `failed` with `reason: "dependency_failed"`:
 
 ```json
-// If operation 0 fails:
+// Request had 3 operations: create_todo (0), complete_todo referencing $result[0].id (1), list_todos (2)
+// Operation 0 fails — operation 1 depends on it and is skipped — operation 2 has no dependency and runs
+
 {
-  "results": [],
+  "results": [
+    { "index": 2, "status": "complete", "result": [ { "id": 1, "title": "existing todo" } ] }
+  ],
   "failed": [
     { "index": 0, "status": "failed", "reason": "validation_error", "detail": "Title is required" },
     { "index": 1, "status": "skipped", "reason": "dependency_failed", "dependency_index": 0 }
@@ -241,7 +245,7 @@ If an upstream operation fails, all downstream operations that reference its res
 }
 ```
 
-Operations that do not reference a failed operation continue to execute. The batch does not halt on first failure — only dependent operations are skipped.
+Operations that do not reference a failed operation continue to execute. The batch does not halt on first failure — only dependent operations are skipped. Results appear in `results` at their original index position regardless of execution order.
 
 ---
 
@@ -524,8 +528,11 @@ Progress stored in `__BackfillProgress` table — survives app restarts. Exposed
 
 ```bash
 # CI queries production app before allowing contract PR merge
-UNMIGRATED=$(curl -s https://api.prod/health/detail | jq '.migrations.backfills[0].remaining')
-GOAL=$(cat migrations/lifecycle.json | jq '.[] | select(.migration=="Add_Summary_Column") | .backfill_goal')
+# Select by migration name — not array index — to handle multiple in-flight migrations
+MIGRATION="Add_Summary_Column"
+UNMIGRATED=$(curl -s https://api.prod/health/migrations \
+  | jq --arg m "$MIGRATION" '.backfills[] | select(.migration == $m) | .remaining')
+GOAL=$(jq --arg m "$MIGRATION" '.[] | select(.migration == $m) | .backfill_goal' migrations/lifecycle.json)
 
 if [ "$UNMIGRATED" -gt "$GOAL" ]; then
   echo "Contract blocked: $UNMIGRATED unmigrated rows exceeds goal of $GOAL"
@@ -540,14 +547,18 @@ The gate uses `backfill_goal` (not zero) because new rows are always dual-writte
 If `lifecycle.json` shows a pending expand/contract, CI greps the codebase to verify the app still dual-writes both columns. If dual-write code is removed before the contract phase completes, the PR is blocked with an actionable error message.
 
 **Contract migration (fully transactional):**
+
+`@safetyThreshold` is computed from `lifecycle.json` at migration generation time (`backfill_goal * backfill_safety_multiplier`) and embedded as a literal integer in the generated SQL — not a runtime variable. The migration generator reads `lifecycle.json` to produce this value before emitting the migration file.
+
 ```csharp
 // Step 1: Final catch-up UPDATE (bounded by backfill_goal — fast)
+// @safetyThreshold is a compile-time literal, e.g. 3000 = backfill_goal(1000) * multiplier(3)
 migrationBuilder.Sql(@"
     DECLARE @count INT;
     UPDATE Todos SET Summary = Title WHERE Summary IS NULL;
     SET @count = @@ROWCOUNT;
-    IF @count > @safety_threshold
-        RAISERROR('Contract safety check failed: %d rows updated, expected ≤ %d', 16, 1, @count, @safety_threshold);
+    IF @count > 3000
+        RAISERROR('Contract safety check failed: %d rows updated, expected ≤ 3000', 16, 1, @count);
 ", suppressTransaction: false); // runs inside the migration transaction
 
 // Step 2: Add NOT NULL constraint (safe — all rows now populated)
@@ -831,10 +842,12 @@ EF wraps all three in one transaction (EF9). Step 3 fails (e.g., index name alre
 ```json
 lifecycle.json:
 [
-  { "migration": "Add_Summary", "phase": "backfill", "old_column": "Title", "new_column": "Summary", "backfill_goal": 1000 },
+  { "migration": "Add_Summary", "phase": "expand", "old_column": "Title", "new_column": "Summary", "backfill_goal": 1000 },
   { "migration": "Add_Priority", "phase": "expand", "old_column": null, "new_column": "Priority", "backfill_goal": 0 }
 ]
 ```
+
+Note: both entries use `"phase": "expand"`. The phase stays `"expand"` throughout the backfill period — `/health/migrations` shows `pct` progress within that phase. Phase only changes to `"complete"` when the contract migration commits.
 
 App: dual-writes `Title`+`Summary` AND writes `Priority` (no old column for Priority — it's a new column being added, but a future contract will remove an old `Urgency` column). Reads from `Title` and `Urgency`.
 
