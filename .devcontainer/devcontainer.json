@@ -1,0 +1,33 @@
+{
+  "name": "TodoList Reference Architecture",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:1-10.0-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "enableNonRootDocker": true,
+      "moby": true
+    }
+  },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "onCreateCommand": "dotnet workload install aspire",
+  "postStartCommand": "dotnet dev-certs https --trust",
+  "forwardPorts": [5000, 5001, 7000, 7001, 18888],
+  "portsAttributes": {
+    "18888": {
+      "label": "Aspire Dashboard",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}

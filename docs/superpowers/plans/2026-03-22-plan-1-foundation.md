@@ -6,7 +6,9 @@
 
 **Architecture:** Domain logic lives entirely in `TodoList.Api/Domain/` — aggregates, events, and `DomainResult<T>`. The API layer is thin Minimal API endpoints that call domain methods and persist results. Integration tests spin up a real SQL Server container via Testcontainers.
 
-**Tech Stack:** .NET 8, ASP.NET Core Minimal API, Entity Framework Core 8 (SQL Server), .NET Aspire, xUnit, FluentAssertions, Testcontainers.MsSql
+**Tech Stack:** .NET 10, ASP.NET Core Minimal API, Entity Framework Core 10 (SQL Server), .NET Aspire, xUnit, FluentAssertions, Testcontainers.MsSql, Dev Container (Docker-in-Docker)
+
+> **All work happens inside the dev container.** The container provides the .NET 10 SDK, Docker-in-Docker (for Aspire SQL Server + Testcontainers), and the Aspire workload — nothing needs to be installed on the host machine except VS Code + Dev Containers extension.
 
 ---
 
@@ -88,35 +90,65 @@ TodoList.Tests/Domain/
 
 ---
 
-## Task 1: Prerequisites
+## Task 0: Dev Container Setup
 
-Verify required tooling is installed.
+All development happens inside the dev container. This task creates the devcontainer config and gets the environment running. After this task, all subsequent tasks run **inside the container** where Docker, .NET 10 SDK, and the Aspire workload are all pre-installed.
 
-- [ ] **Step 1: Check .NET 8 SDK**
-
-```bash
-dotnet --version
-```
-Expected: `8.x.x`
-
-- [ ] **Step 2: Install .NET Aspire workload (if not present)**
+- [ ] **Step 1: Verify `.devcontainer/devcontainer.json` exists**
 
 ```bash
-dotnet workload list
+cat .devcontainer/devcontainer.json
 ```
-If `aspire` is not listed:
-```bash
-dotnet workload install aspire
-```
+Expected: the file is already committed to the repo (created alongside this plan).
 
-Note: `dotnet new aspire-servicedefaults` scaffolds all required OTel and service discovery packages into `TodoList.ServiceDefaults`. No manual package installation is needed for that project.
+- [ ] **Step 2: Open the repo in the dev container**
 
-- [ ] **Step 3: Verify Docker is running** (required for Testcontainers + Aspire SQL)
+In VS Code: open the command palette → **Dev Containers: Reopen in Container**
+
+Or on GitHub: open in Codespaces.
+
+Wait for the container to build (~2–5 min on first open). The `onCreateCommand` installs the Aspire workload automatically.
+
+- [ ] **Step 3: Verify Docker is available inside the container**
 
 ```bash
 docker info
 ```
-Expected: no error, shows server info.
+Expected: Docker daemon info — no error.
+
+- [ ] **Step 4: Verify .NET 10 SDK and Aspire workload**
+
+```bash
+dotnet --version          # 10.x.x
+dotnet workload list      # should list: aspire
+```
+
+- [ ] **Step 5: Commit the devcontainer config** (if not already committed)
+
+```bash
+git add .devcontainer/devcontainer.json
+git commit -m "feat: add dev container with Docker-in-Docker and Aspire workload"
+```
+
+---
+
+## Task 1: Prerequisites
+
+All tooling is provided by the dev container — no manual installation needed.
+
+- [ ] **Step 1: Confirm you are working inside the dev container**
+
+The VS Code status bar at the bottom-left should show `Dev Container: TodoList Reference Architecture`.
+
+- [ ] **Step 2: Verify build tools**
+
+```bash
+dotnet --version       # 10.x.x
+dotnet workload list   # shows aspire
+docker info            # no error
+```
+
+Expected: all three commands succeed.
 
 ---
 

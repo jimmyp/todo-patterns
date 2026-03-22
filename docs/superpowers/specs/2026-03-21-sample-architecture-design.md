@@ -38,6 +38,7 @@ This architecture prioritises:
 - **Machine-readable feedback at every stage** — structured output agents can consume without human intermediation
 - **Agent-native interfaces** — the system is queryable and operable by AI agents without requiring human presence
 - **Observable user value** — business metrics alongside technical metrics so agents can verify deployments improved, not just succeeded
+- **Zero-setup developer environment** — a dev container provides the full environment (Docker-in-Docker, .NET SDK, Aspire workload) on first open. No local Docker installation required on the host machine.
 
 ---
 
@@ -82,10 +83,10 @@ TodoList.sln
 
 | Concern | Technology | Version |
 |---|---|---|
-| Runtime | .NET | 8.0 |
-| Web framework | ASP.NET Core Razor Pages | 8.0 |
-| API framework | ASP.NET Core Minimal API | 8.0 |
-| ORM | Entity Framework Core | 8.0 |
+| Runtime | .NET | 10.0 |
+| Web framework | ASP.NET Core Razor Pages | 10.0 |
+| API framework | ASP.NET Core Minimal API | 10.0 |
+| ORM | Entity Framework Core | 10.0 |
 | Database | Azure SQL (production), SQL Server container (local/CI) | — |
 | Messaging | Wolverine | Latest stable |
 | Message transport | Azure Service Bus (production), in-memory (tests) | — |
@@ -98,7 +99,8 @@ TodoList.sln
 | Integration test infra | Testcontainers for .NET | Latest stable |
 | HTTP stubbing | WireMock.NET | Latest stable |
 | CLI generation | Kiota (Microsoft) | Latest stable |
-| Authentication | ASP.NET Core Identity | 8.0 |
+| Authentication | ASP.NET Core Identity | 10.0 |
+| Dev environment | Dev Container (Docker-in-Docker) | — |
 | Social login | Google OAuth 2.0, GitHub OAuth | — |
 | IaC (core) | Bicep via .NET Aspire + azd | — |
 | IaC (overlay) | Pulumi C# | Latest stable |
