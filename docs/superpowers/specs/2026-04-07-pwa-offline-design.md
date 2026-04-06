@@ -55,16 +55,30 @@ No separate "offline mode". No spinners for pending commands while offline. A su
 ### Event types
 
 ```
-TodoCreated, TodoCompleted, TodoDeleted, TodoUpdated
-CategoryCreated, CategoryUpdated, CategoryDeleted
-TodoCategoryAssigned, TodoDueDateSet, TodoNotesUpdated, TodoProgressUpdated
+// Todo
+TodoCreated, TodoCompleted, TodoDeleted, TodoRenamed
+TodoCategoryAssigned, TodoCategoryUnassigned
+TodoDueDateSet, TodoDueDateCleared
+TodoNotesUpdated, TodoProgressUpdated
+
+// CategoryList (aggregate ID = userId)
+CategoryAdded, CategoryRenamed, CategoryColorChanged
+CategoryIconChanged, CategoryReordered, CategoryRemoved
+UserSeeded
 ```
 
 ### Command types
 
 ```
-CreateTodo, CompleteTodo, DeleteTodo, UpdateTodo
-CreateCategory, UpdateCategory, DeleteCategory
+// Todo
+CreateTodo, CompleteTodo, DeleteTodo, RenameTodo
+AssignCategory, UnassignCategory
+SetDueDate, ClearDueDate
+UpdateNotes, UpdateProgress
+
+// CategoryList
+AddCategory, RenameCategory, ChangeCategoryColor
+ChangeCategoryIcon, ReorderCategory, RemoveCategory
 ```
 
 ---
