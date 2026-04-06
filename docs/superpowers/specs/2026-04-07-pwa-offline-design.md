@@ -64,7 +64,6 @@ TodoNotesUpdated, TodoProgressUpdated
 // CategoryList (aggregate ID = userId)
 CategoryAdded, CategoryRenamed, CategoryColorChanged
 CategoryIconChanged, CategoryReordered, CategoryRemoved
-UserSeeded
 ```
 
 ### Command types

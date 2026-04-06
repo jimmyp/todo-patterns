@@ -19,6 +19,9 @@ public class CategoryList
     public int Version { get; private set; }
     public IReadOnlyList<Category> Categories { get; private set; }
 
+    // Creates a new CategoryList pre-seeded with default categories
+    public static (CategoryList, IReadOnlyList<CategoryAddedEvent>) Create(string userId) { ... }
+
     // Invariant: names unique within this list
     public DomainResult<CategoryAddedEvent> AddCategory(string name, string color, string icon) { ... }
     public DomainResult<CategoryRenamedEvent> RenameCategory(Guid id, string newName) { ... }
@@ -68,7 +71,6 @@ CategoryColorChanged { UserId, CategoryId, NewColor }
 CategoryIconChanged  { UserId, CategoryId, NewIcon }
 CategoryReordered    { UserId, CategoryId, NewOrder }
 CategoryRemoved      { UserId, CategoryId }
-UserSeeded           { UserId }                        // triggers default category seeding
 ```
 
 ### Todo events (new)
