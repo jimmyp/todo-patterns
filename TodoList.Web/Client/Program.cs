@@ -13,8 +13,9 @@ builder.Services.AddScoped(sp =>
 
 builder.Services.AddMudServices();
 
-// Stub stores for Plan B — replaced with real implementations in Plan C
-builder.Services.AddSingleton<ILocalTodoStore, StubLocalTodoStore>();
-builder.Services.AddSingleton<ILocalCategoryStore, StubLocalCategoryStore>();
+// Real stores (Plan C) — ClientStore registered in Task 10 full DI setup
+builder.Services.AddSingleton<IClientStore, ClientStore>();
+builder.Services.AddSingleton<ILocalTodoStore, LocalTodoStore>();
+builder.Services.AddSingleton<ILocalCategoryStore, LocalCategoryStore>();
 
 await builder.Build().RunAsync();
