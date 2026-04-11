@@ -51,9 +51,5 @@ public static class AppTheme
             H5 = new H5Typography { FontFamily = ["Space Grotesk", "sans-serif"] },
             H6 = new H6Typography { FontFamily = ["Space Grotesk", "sans-serif"] },
         },
-        Shape = new Shape
-        {
-            BorderRadius = 4
-        }
     };
 }

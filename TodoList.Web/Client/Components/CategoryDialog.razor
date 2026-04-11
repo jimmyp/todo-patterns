@@ -21,11 +21,11 @@
                 <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
                     @foreach (var preset in _presetColors)
                     {
-                        <button @onclick="() => Color = preset"
-                                style="@($"width:28px;height:28px;border-radius:4px;background:{preset};border:{(Color == preset ? "3px solid white" : "2px solid transparent")};cursor:pointer;padding:0;")"
+                        <button @onclick="() => ColorHex = preset"
+                                style="@($"width:28px;height:28px;border-radius:4px;background:{preset};border:{(ColorHex == preset ? "3px solid white" : "2px solid transparent")};cursor:pointer;padding:0;")"
                                 title="@preset" />
                     }
-                    <MudTextField @bind-Value="Color"
+                    <MudTextField @bind-Value="ColorHex"
                                   Variant="Variant.Outlined"
                                   Style="width:120px;font-family:var(--font-mono);font-size:0.8rem;"
                                   Placeholder="#8B5CF6" />
@@ -43,7 +43,7 @@
             {
                 <div style="display:flex;align-items:center;gap:0.5rem;">
                     <MudText Typo="Typo.caption" Style="color:var(--text-muted);">Preview:</MudText>
-                    <span class="material-symbols-outlined" style="@($"color:{Color};")">@Icon</span>
+                    <span class="material-symbols-outlined" style="@($"color:{ColorHex};")">@Icon</span>
                 </div>
             }
         </MudStack>
@@ -53,7 +53,7 @@
         <MudButton OnClick="Submit"
                    Variant="Variant.Filled"
                    Color="Color.Primary"
-                   Disabled="@(string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(Color))">
+                   Disabled="@(string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(ColorHex))">
             @(IsEdit ? "Save" : "Create")
         </MudButton>
     </DialogActions>
@@ -68,7 +68,7 @@
     [Parameter] public string? InitialIcon { get; set; }
 
     private string Name { get; set; } = "";
-    private string Color { get; set; } = "#8B5CF6";
+    private string ColorHex { get; set; } = "#8B5CF6";
     private string Icon { get; set; } = "";
 
     private readonly string[] _presetColors = ["#8B5CF6", "#F59E0B", "#EF4444", "#0EA5E9", "#00FF9D"];
@@ -76,7 +76,7 @@
     protected override void OnParametersSet()
     {
         Name = InitialName ?? "";
-        Color = InitialColor;
+        ColorHex = InitialColor;
         Icon = InitialIcon ?? "";
     }
 
@@ -84,11 +84,11 @@
 
     private void Submit()
     {
-        if (string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(Color)) return;
+        if (string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(ColorHex)) return;
         MudDialog.Close(DialogResult.Ok(new CategoryDialogResult
         {
             Name = Name,
-            Color = Color,
+            Color = ColorHex,
             Icon = Icon
         }));
     }

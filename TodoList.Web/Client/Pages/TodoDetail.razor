@@ -37,10 +37,10 @@ else
 
                 <MudSelect T="string"
                            @bind-Value="_categoryId"
+                           @bind-Value:after="@(() => SaveCategory(_categoryId))"
                            Label="Category"
                            Variant="Variant.Outlined"
-                           Clearable="true"
-                           ValueChanged="SaveCategory">
+                           Clearable="true">
                     @foreach (var cat in CategoryStore.Categories)
                     {
                         <MudSelectItem T="string" Value="@cat.Id.ToString()">
@@ -53,10 +53,10 @@ else
                 </MudSelect>
 
                 <MudDatePicker @bind-Date="_dueDate"
+                               @bind-Date:after="@(() => SaveDueDate(_dueDate))"
                                Label="Due date"
                                Variant="Variant.Outlined"
-                               Clearable="true"
-                               DateChanged="SaveDueDate" />
+                               Clearable="true" />
 
                 <MudTextField @bind-Value="_notes"
                               Label="Notes"
@@ -66,11 +66,11 @@ else
                               Immediate="true" />
 
                 <MudSlider @bind-Value="_progress"
+                           @bind-Value:after="@(() => SaveProgress(_progress))"
                            Min="0"
                            Max="100"
                            Step="5"
-                           Color="Color.Primary"
-                           ValueChanged="SaveProgress">
+                           Color="Color.Primary">
                     Progress: @_progress%
                 </MudSlider>
 
@@ -136,12 +136,14 @@ else
 
     private void SaveCategory(string? value)
     {
+        _categoryId = value;
         // Plan C dispatches AssignCategoryCommand / UnassignCategoryCommand
         Snackbar.Add("Category saved (not yet wired to API)", Severity.Info);
     }
 
     private void SaveDueDate(DateTime? value)
     {
+        _dueDate = value;
         // Plan C dispatches SetDueDateCommand / ClearDueDateCommand
         Snackbar.Add("Due date saved (not yet wired to API)", Severity.Info);
     }
@@ -154,7 +156,6 @@ else
 
     private void SaveProgress(int value)
     {
-        _progress = value;
         // Plan C dispatches UpdateProgressCommand
         Snackbar.Add("Progress saved (not yet wired to API)", Severity.Info);
     }

@@ -1,7 +1,7 @@
 @* TodoList.Web/Client/Components/TaskRow.razor *@
 @using TodoList.Domain.ReadModels
 
-<MudListItem Style="@($"background:{(IsHovered ? "var(--bg-surface-hover)" : "transparent")};border-radius:var(--radius);padding:0.5rem 0.75rem;transition:background var(--transition);")"
+<MudListItem T="string" Style="@($"background:{(IsHovered ? "var(--bg-surface-hover)" : "transparent")};border-radius:var(--radius);padding:0.5rem 0.75rem;transition:background var(--transition);")"
              @onmouseenter="() => IsHovered = true"
              @onmouseleave="() => IsHovered = false">
     <div style="display:flex;align-items:center;gap:0.75rem;">
