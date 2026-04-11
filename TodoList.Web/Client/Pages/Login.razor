@@ -1,0 +1,40 @@
+@* TodoList.Web/Client/Pages/Login.razor *@
+@page "/login"
+@layout EmptyLayout
+
+<PageTitle>Sign in — TodoList</PageTitle>
+
+<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;background:var(--bg-app);padding:1rem;">
+    <MudPaper Elevation="0"
+              Style="background:var(--bg-surface);border-radius:var(--radius);padding:2.5rem;width:100%;max-width:380px;text-align:center;">
+
+        <MudText Typo="Typo.h4" Style="font-family:var(--font-heading);color:var(--primary);font-weight:700;margin-bottom:0.25rem;">
+            TodoList
+        </MudText>
+        <MudText Typo="Typo.body1" Style="color:var(--text-muted);margin-bottom:2rem;">
+            Sign in to your account
+        </MudText>
+
+        <MudStack Spacing="2">
+            <MudButton Variant="Variant.Outlined"
+                       FullWidth="true"
+                       StartIcon="@Icons.Custom.Brands.Google"
+                       Style="border-color:var(--border);color:var(--text-main);justify-content:flex-start;padding:0.75rem 1rem;"
+                       Href="/auth/google">
+                Continue with Google
+            </MudButton>
+
+            <MudButton Variant="Variant.Outlined"
+                       FullWidth="true"
+                       StartIcon="@Icons.Custom.Brands.GitHub"
+                       Style="border-color:var(--border);color:var(--text-main);justify-content:flex-start;padding:0.75rem 1rem;"
+                       Href="/auth/github">
+                Continue with GitHub
+            </MudButton>
+        </MudStack>
+
+        <MudText Typo="Typo.caption" Style="color:var(--text-muted);margin-top:2rem;display:block;">
+            By signing in, you agree to the terms of service.
+        </MudText>
+    </MudPaper>
+</div>
