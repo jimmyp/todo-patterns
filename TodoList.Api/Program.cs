@@ -36,6 +36,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 app.MapDefaultEndpoints();   // registers /health/live and /health/ready
 app.MapTodoEndpoints();
 app.MapOperationEndpoints();
+app.MapCategoryEndpoints();
 
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
