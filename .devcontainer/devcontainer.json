@@ -18,11 +18,25 @@
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
   },
   "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
+    "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
+    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind",
+    "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh,type=bind,readonly",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/gh,target=/home/node/.config/gh,type=bind,readonly",
+    "source=${localEnv:HOME}/.secrets,target=/home/node/.secrets,type=bind,readonly",
+    "source=${localEnv:HOME}/.nuget/packages,target=/home/node/.nuget/packages,type=bind",
+    "source=${localEnv:HOME}/.config/superpowers,target=/home/node/.config/superpowers,type=bind,readonly"
   ],
   "onCreateCommand": "dotnet workload install aspire && npm install -g @anthropic-ai/claude-code && mkdir -p /home/vscode/.claude/projects && ln -sf /home/vscode/.claude/projects/-Users-jim-code-todo-patterns /home/vscode/.claude/projects/-workspaces-todo-patterns",
   "postStartCommand": "dotnet dev-certs https --trust",
-  "forwardPorts": [5000, 5001, 7000, 7001, 18888],
+  "forwardPorts": [
+    5000,
+    5001,
+    7000,
+    7001,
+    18888
+  ],
   "portsAttributes": {
     "18888": {
       "label": "Aspire Dashboard",
@@ -32,9 +46,20 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-dotnettools.csdevkit",
-        "ms-azuretools.vscode-docker"
-      ]
+        "anthropic.claude-code",
+        "ms-azuretools.vscode-docker",
+        "ms-dotnettools.csdevkit"
+      ],
+      "settings": {
+        "task.allowAutomaticTasks": "on",
+        "security.workspace.trust.enabled": false
+      }
     }
-  }
+  },
+  "containerEnv": {
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+    "DOTNET_ROOT": "/usr/local/dotnet",
+    "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
+  }"postCreateCommand": "",
 }

@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using TodoList.Api.Domain;
+using TodoList.Domain.Aggregates;
 using TodoList.Api.Operations;
 
 namespace TodoList.Api.Data;

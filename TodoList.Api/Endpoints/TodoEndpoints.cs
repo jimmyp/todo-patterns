@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using TodoList.Api.Data;
-using TodoList.Api.Domain;
+using TodoList.Domain.Aggregates;
 using TodoList.Api.Operations;
 
 namespace TodoList.Api.Endpoints;

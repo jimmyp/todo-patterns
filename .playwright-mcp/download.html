@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Task Manager - Categories</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#8B5CF6", // Updated from cyan to purple
+          "background-light": "#f6f8f8",
+          "background-dark": "#0B0D10",
+          "surface": "#161920",
+          "surface-hover": "#1F242D",
+          "text-main": "#E2E8F0",
+          "text-muted": "#8492A6",
+          "border-subtle": "#1F242D",
+          "accent-success": "#00FF9D",
+          "accent-error": "#EF4444",
+        },
+        fontFamily: {
+          "display": ["Space Grotesk", "sans-serif"],
+          "body": ["IBM Plex Sans", "sans-serif"],
+          "mono": ["IBM Plex Mono", "monospace"],
+        },
+        borderRadius: {"DEFAULT": "0.25rem", "sm": "0.125rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+      },
+    },
+  }
+</script>
+<style>
+  body {
+    background-color: theme('colors.background-dark');
+    color: theme('colors.text-main');
+    font-family: theme('fontFamily.body');
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: theme('fontFamily.display');
+  }
+
+  .mono-text {
+    font-family: theme('fontFamily.mono');
+  }
+</style>
+</head>
+<body class="bg-background-dark min-h-screen overflow-x-hidden flex selection:bg-primary/30 selection:text-primary">
+<!-- Shared SideNavBar -->
+<div class="relative flex h-auto min-h-screen w-full flex-col bg-background-dark dark group/design-root overflow-x-hidden" style='font-family: "IBM Plex Sans", sans-serif;'>
+<div class="layout-container flex h-full grow flex-row">
+<!-- Sidebar -->
+<div class="w-60 flex-shrink-0 flex flex-col h-screen sticky top-0 border-r border-border-subtle bg-surface z-10">
+<div class="flex h-full flex-col justify-between p-4">
+<div class="flex flex-col gap-6">
+<div class="flex flex-col px-2 mt-2">
+<h1 class="text-text-main text-xl font-bold leading-normal tracking-tight font-display">System</h1>
+<p class="text-text-muted text-xs font-mono tracking-wider uppercase mt-1">Task Manager</p>
+</div>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-surface-hover transition-colors duration-150 ease-out group text-text-muted hover:text-text-main" href="#">
+<span class="material-symbols-outlined text-xl transition-colors duration-150 group-hover:text-primary" style="font-variation-settings: 'FILL' 0;">dashboard</span>
+<p class="text-sm font-medium leading-normal">Task Board</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-sm bg-surface-hover text-text-main border-l-2 border-primary" href="#">
+<span class="material-symbols-outlined text-xl text-primary" style="font-variation-settings: 'FILL' 1;">sell</span>
+<p class="text-sm font-medium leading-normal">Categories</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-surface-hover transition-colors duration-150 ease-out group text-text-muted hover:text-text-main" href="#">
+<span class="material-symbols-outlined text-xl transition-colors duration-150 group-hover:text-primary" style="font-variation-settings: 'FILL' 0;">settings</span>
+<p class="text-sm font-medium leading-normal">Theme Settings</p>
+</a>
+</div>
+</div>
+<!-- User Profile snippet at bottom -->
+<div class="mt-auto pt-4 border-t border-border-subtle flex items-center gap-3 px-2">
+<div class="bg-surface-hover aspect-square bg-cover rounded-full size-8 border border-border-subtle" data-alt="Portrait of a young man with glasses and short hair, simple dark background" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAY7W6SDsY6_MtwWljGaQF1u5dP4to3fyjVlwMnPTxsJzQ-tF8mSD_X0K19TWluKM5T7CscAS9ulDLvjij905Mq-hVkgwvladlsmOAYg38zfOeNiTZSOEocWtPjIyVs5WxiraTXnrb_kHtjiCgWOOcnlrATgqMe-bAqGO96wCCr2CvMM9IcGImlAqBEHJ1GmAoFKo2ncDcHKcab8RyaXaJQciBW3T7QTmSih0QMZbZa1_B6CfU4cqyZ_Bf5EMYHe0_VeK3WfmZZ80DK");'></div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-text-main">Admin User</span>
+<span class="text-xs font-mono text-text-muted">v2.4.1</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col min-w-0 bg-background-dark">
+<!-- Shared TopAppBar (Adapted for layout) -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-border-subtle px-8 py-3 bg-surface sticky top-0 z-10 h-16">
+<div class="flex items-center gap-8 flex-1">
+<label class="flex flex-col min-w-40 h-10 max-w-md w-full relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-xl pointer-events-none">search</span>
+<input class="w-full bg-surface-hover border border-border-subtle rounded-sm text-text-main focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary h-full pl-10 pr-4 text-sm font-body transition-colors duration-150 placeholder:text-text-muted" placeholder="Search categories..." value=""/>
+</label>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-text-muted hover:text-text-main transition-colors p-2 rounded-sm hover:bg-surface-hover">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<button class="bg-primary text-white hover:bg-primary/90 px-4 py-2 rounded-sm font-display text-sm uppercase tracking-wider font-semibold transition-colors duration-150 ease-out flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">add</span>
+             New Task
+           </button>
+</div>
+</header>
+<!-- Page Content -->
+<main class="flex-1 p-8 overflow-y-auto">
+<!-- Header Section -->
+<div class="flex flex-col gap-2 mb-8">
+<h2 class="text-text-main text-3xl font-bold leading-tight font-display tracking-tight">Categories</h2>
+<p class="text-text-muted text-sm font-body max-w-2xl">Manage system tags, project modules, and logical groupings. Categories are used globally to filter tasks and track structural metrics.</p>
+</div>
+<!-- Grid Section -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-12">
+<!-- Category Card 1 -->
+<div class="bg-surface border border-border-subtle rounded-sm p-5 min-h-[100px] flex flex-col justify-between hover:border-primary cursor-pointer transition-all duration-150 ease-out group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-[#8B5CF6]"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-muted group-hover:text-text-main transition-colors">code</span>
+<h3 class="font-display text-lg text-text-main font-semibold">Frontend</h3>
+</div>
+<div class="w-4 h-4 rounded-full bg-[#8B5CF6] border border-border-subtle" title="Color: Purple"></div>
+</div>
+<div class="flex justify-between items-end mt-auto">
+<span class="text-xs text-text-muted font-body">Active Tasks</span>
+<span class="mono-text text-sm text-text-main bg-surface-hover px-2 py-1 rounded-sm border border-border-subtle">142</span>
+</div>
+</div>
+<!-- Category Card 2 -->
+<div class="bg-surface border border-border-subtle rounded-sm p-5 min-h-[100px] flex flex-col justify-between hover:border-primary cursor-pointer transition-all duration-150 ease-out group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-[#F59E0B]"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-muted group-hover:text-text-main transition-colors">database</span>
+<h3 class="font-display text-lg text-text-main font-semibold">Backend</h3>
+</div>
+<div class="w-4 h-4 rounded-full bg-[#F59E0B] border border-border-subtle" title="Color: Amber"></div>
+</div>
+<div class="flex justify-between items-end mt-auto">
+<span class="text-xs text-text-muted font-body">Active Tasks</span>
+<span class="mono-text text-sm text-text-main bg-surface-hover px-2 py-1 rounded-sm border border-border-subtle">87</span>
+</div>
+</div>
+<!-- Category Card 3 -->
+<div class="bg-surface border border-border-subtle rounded-sm p-5 min-h-[100px] flex flex-col justify-between hover:border-primary cursor-pointer transition-all duration-150 ease-out group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-accent-error"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-muted group-hover:text-text-main transition-colors">warning</span>
+<h3 class="font-display text-lg text-text-main font-semibold">Urgent</h3>
+</div>
+<div class="w-4 h-4 rounded-full bg-accent-error border border-border-subtle" title="Color: Red"></div>
+</div>
+<div class="flex justify-between items-end mt-auto">
+<span class="text-xs text-text-muted font-body">Active Tasks</span>
+<span class="mono-text text-sm text-accent-error bg-accent-error/10 px-2 py-1 rounded-sm border border-accent-error/30">12</span>
+</div>
+</div>
+<!-- Category Card 4 -->
+<div class="bg-surface border border-border-subtle rounded-sm p-5 min-h-[100px] flex flex-col justify-between hover:border-primary cursor-pointer transition-all duration-150 ease-out group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-[#0ea5e9]"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-muted group-hover:text-text-main transition-colors">design_services</span>
+<h3 class="font-display text-lg text-text-main font-semibold">Design</h3>
+</div>
+<div class="w-4 h-4 rounded-full bg-[#0ea5e9] border border-border-subtle" title="Color: Sky"></div>
+</div>
+<div class="flex justify-between items-end mt-auto">
+<span class="text-xs text-text-muted font-body">Active Tasks</span>
+<span class="mono-text text-sm text-text-main bg-surface-hover px-2 py-1 rounded-sm border border-border-subtle">45</span>
+</div>
+</div>
+<!-- Add Category Button -->
+<button class="bg-transparent border-2 border-dashed border-border-subtle rounded-sm p-5 min-h-[100px] flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-all duration-150 ease-out group">
+<span class="material-symbols-outlined text-text-muted group-hover:text-primary mb-2 text-2xl transition-colors">add_circle</span>
+<span class="font-display font-semibold text-text-muted group-hover:text-primary transition-colors">Create Category</span>
+</button>
+</div>
+<!-- Data Grid Section (Bulk Edit) -->
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between border-b border-border-subtle pb-2">
+<h3 class="text-xl font-display font-semibold text-text-main">Bulk Management</h3>
+<button class="text-sm font-mono text-text-muted hover:text-primary flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[16px]">filter_list</span> Filter
+            </button>
+</div>
+<div class="bg-surface border border-border-subtle rounded-sm overflow-hidden">
+<table class="w-full text-left text-sm font-body">
+<thead class="bg-surface-hover text-text-muted border-b border-border-subtle font-mono text-xs uppercase tracking-wider">
+<tr>
+<th class="px-4 py-3 font-medium">Name</th>
+<th class="px-4 py-3 font-medium">Color</th>
+<th class="px-4 py-3 font-medium">Icon</th>
+<th class="px-4 py-3 font-medium">Count</th>
+<th class="px-4 py-3 font-medium text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-subtle text-text-main">
+<tr class="hover:bg-surface-hover/50 transition-colors">
+<td class="px-4 py-3 font-medium">Frontend</td>
+<td class="px-4 py-3">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-[#8B5CF6]"></div>
+<span class="mono-text text-text-muted text-xs">#8B5CF6</span>
+</div>
+</td>
+<td class="px-4 py-3 text-text-muted mono-text text-xs">code</td>
+<td class="px-4 py-3 mono-text">142</td>
+<td class="px-4 py-3 text-right">
+<button class="text-text-muted hover:text-primary p-1"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+<button class="text-text-muted hover:text-accent-error p-1 ml-1"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-hover/50 transition-colors">
+<td class="px-4 py-3 font-medium">Backend</td>
+<td class="px-4 py-3">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-[#F59E0B]"></div>
+<span class="mono-text text-text-muted text-xs">#F59E0B</span>
+</div>
+</td>
+<td class="px-4 py-3 text-text-muted mono-text text-xs">database</td>
+<td class="px-4 py-3 mono-text">87</td>
+<td class="px-4 py-3 text-right">
+<button class="text-text-muted hover:text-primary p-1"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+<button class="text-text-muted hover:text-accent-error p-1 ml-1"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-hover/50 transition-colors">
+<td class="px-4 py-3 font-medium">Urgent</td>
+<td class="px-4 py-3">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-accent-error"></div>
+<span class="mono-text text-text-muted text-xs">#EF4444</span>
+</div>
+</td>
+<td class="px-4 py-3 text-text-muted mono-text text-xs">warning</td>
+<td class="px-4 py-3 mono-text">12</td>
+<td class="px-4 py-3 text-right">
+<button class="text-text-muted hover:text-primary p-1"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+<button class="text-text-muted hover:text-accent-error p-1 ml-1"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+<!-- Table Footer / Pagination -->
+<div class="bg-surface-hover border-t border-border-subtle px-4 py-3 flex items-center justify-between text-xs font-mono text-text-muted">
+<span>Showing 1-4 of 12 categories</span>
+<div class="flex gap-2">
+<button class="hover:text-text-main disabled:opacity-50" disabled="">&lt; Prev</button>
+<button class="hover:text-text-main">Next &gt;</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+</div>
+</body></html>
