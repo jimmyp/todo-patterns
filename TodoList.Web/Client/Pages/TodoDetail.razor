@@ -1,0 +1,169 @@
+@* TodoList.Web/Client/Pages/TodoDetail.razor *@
+@page "/todos/{Id}"
+@using TodoList.Domain.ReadModels
+@inject ILocalTodoStore TodoStore
+@inject ILocalCategoryStore CategoryStore
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>@(_todo?.Title ?? "Task")</PageTitle>
+
+@if (_todo == null)
+{
+    <div style="display:flex;justify-content:center;padding:3rem;">
+        <MudText Style="color:var(--text-muted);">Task not found.</MudText>
+    </div>
+}
+else
+{
+    <div style="max-width:640px;">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.5rem;">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="@(() => Nav.NavigateTo("/"))"
+                           Style="color:var(--text-muted);" />
+            <MudText Typo="Typo.h6" Style="font-family:var(--font-heading);">
+                Task Detail
+            </MudText>
+        </div>
+
+        <MudPaper Elevation="0" Style="background:var(--bg-surface);border-radius:var(--radius);padding:1.5rem;">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_title"
+                              Label="Title"
+                              Variant="Variant.Outlined"
+                              @onblur="SaveTitle"
+                              Immediate="true" />
+
+                <MudSelect T="string"
+                           @bind-Value="_categoryId"
+                           Label="Category"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           ValueChanged="SaveCategory">
+                    @foreach (var cat in CategoryStore.Categories)
+                    {
+                        <MudSelectItem T="string" Value="@cat.Id.ToString()">
+                            <div style="display:flex;align-items:center;gap:0.5rem;">
+                                <span style="@($"width:10px;height:10px;border-radius:2px;background:{cat.Color};display:inline-block;")"></span>
+                                @cat.Name
+                            </div>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudDatePicker @bind-Date="_dueDate"
+                               Label="Due date"
+                               Variant="Variant.Outlined"
+                               Clearable="true"
+                               DateChanged="SaveDueDate" />
+
+                <MudTextField @bind-Value="_notes"
+                              Label="Notes"
+                              Variant="Variant.Outlined"
+                              Lines="4"
+                              @onblur="SaveNotes"
+                              Immediate="true" />
+
+                <MudSlider @bind-Value="_progress"
+                           Min="0"
+                           Max="100"
+                           Step="5"
+                           Color="Color.Primary"
+                           ValueChanged="SaveProgress">
+                    Progress: @_progress%
+                </MudSlider>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;padding-top:0.5rem;border-top:1px solid var(--border);">
+                    <MudText Typo="Typo.caption" Style="color:var(--text-muted);">
+                        Created @_todo.CreatedAt.ToString("MMM d, yyyy")
+                    </MudText>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Delete"
+                               OnClick="HandleDelete">
+                        Delete
+                    </MudButton>
+                </div>
+            </MudStack>
+        </MudPaper>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private TodoSummary? _todo;
+    private string _title = "";
+    private string? _categoryId;
+    private DateTime? _dueDate;
+    private string? _notes;
+    private int _progress;
+
+    protected override void OnInitialized()
+    {
+        TodoStore.OnChange += Reload;
+        Reload();
+    }
+
+    protected override void OnParametersSet() => Reload();
+
+    private void Reload()
+    {
+        if (Guid.TryParse(Id, out var guid))
+            _todo = TodoStore.GetById(guid);
+        else
+            _todo = null;
+
+        if (_todo != null)
+        {
+            _title = _todo.Title;
+            _categoryId = _todo.CategoryId?.ToString();
+            _dueDate = _todo.DueDate?.DateTime;
+            _notes = null; // Notes not in summary — would be fetched separately in real impl
+            _progress = _todo.Progress;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SaveTitle()
+    {
+        if (_todo == null || _title == _todo.Title) return;
+        // Plan C dispatches RenameTodoCommand
+        Snackbar.Add("Title saved (not yet wired to API)", Severity.Info);
+    }
+
+    private void SaveCategory(string? value)
+    {
+        // Plan C dispatches AssignCategoryCommand / UnassignCategoryCommand
+        Snackbar.Add("Category saved (not yet wired to API)", Severity.Info);
+    }
+
+    private void SaveDueDate(DateTime? value)
+    {
+        // Plan C dispatches SetDueDateCommand / ClearDueDateCommand
+        Snackbar.Add("Due date saved (not yet wired to API)", Severity.Info);
+    }
+
+    private void SaveNotes()
+    {
+        // Plan C dispatches UpdateNotesCommand
+        Snackbar.Add("Notes saved (not yet wired to API)", Severity.Info);
+    }
+
+    private void SaveProgress(int value)
+    {
+        _progress = value;
+        // Plan C dispatches UpdateProgressCommand
+        Snackbar.Add("Progress saved (not yet wired to API)", Severity.Info);
+    }
+
+    private void HandleDelete()
+    {
+        // Plan C dispatches DeleteTodoCommand then navigates back
+        Nav.NavigateTo("/");
+    }
+
+    public void Dispose() => TodoStore.OnChange -= Reload;
+}
