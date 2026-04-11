@@ -16,8 +16,11 @@
 | PWA | Blazor PWA template (`service-worker.published.js`) |
 | CSS | MudBlazor theme + CSS custom properties for design tokens |
 | Icons | Google Material Symbols (via font) |
+| Shared domain | `TodoList.Domain` — aggregates, events, commands, read models, validation, saga definitions |
 
 The `TodoList.Web` project replaces the current Razor Pages stub. It becomes a Blazor WASM hosted project: a thin ASP.NET Core host serving the WASM app, handling OAuth login/logout, and proxying auth cookies.
+
+The client references `TodoList.Domain` directly — validation runs locally before dispatch, read model projectors are shared, and `ISagaDefinition` implementations are reflected over at startup to detect saga-initiating commands.
 
 ---
 
@@ -153,8 +156,14 @@ TodoList.Web/
       TaskDialog.razor             # Add/edit dialog
       CategoryCard.razor
       CategoryDialog.razor
-      UnsyncedDot.razor
+      UnsyncedDot.razor            # Unsynced dot indicator
+      ConflictWarning.razor        # Warning icon for conflicted (422) items
       ConnectivityBanner.razor     # Shown only when sync fails (persistent alert)
+    Store/
+      ClientStore.cs               # localStorage-backed event + command store
+      LocalTodoStore.cs            # Projected TodoSummary[] from ClientStore
+      LocalCategoryStore.cs        # Projected CategorySummary[] from ClientStore
+      CommandDispatcher.cs         # Dispatch, validate, detect saga-initiating commands
     Theme/
       AppTheme.cs                  # MudTheme definition
       DesignTokens.cs              # CSS custom property names as constants

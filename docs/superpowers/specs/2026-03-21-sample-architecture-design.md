@@ -46,8 +46,9 @@ This architecture prioritises:
 
 ```
 TodoList.sln
-├── TodoList.Api/              # REST API — business logic, EF Core, Wolverine, SendGrid
-├── TodoList.Web/              # Razor Pages UI — thin, optimistic updates, calls Api over HTTP
+├── TodoList.Domain/           # Shared — aggregates, events, commands, read models, validation, saga definitions
+├── TodoList.Api/              # REST API — EF Core, Wolverine, SendGrid, SignalR hub
+├── TodoList.Web/              # Blazor WASM PWA — mobile-first, offline-capable, references Domain
 ├── TodoList.Mcp.Tools/        # Standard MCP server — official Anthropic SDK, one tool per capability
 ├── TodoList.Mcp.Composite/    # Composite API — Plan/Execute endpoints, wraps Api
 ├── TodoList.AppHost/          # .NET Aspire orchestration — wires all services locally
@@ -60,8 +61,9 @@ TodoList.sln
 
 | Project | Owns | Does NOT own |
 |---|---|---|
-| `Api` | Domain logic, DB, messaging, email, health endpoints | UI, agent interface |
-| `Web` | Razor Pages, optimistic UI, HTTP calls to Api | Business logic, data |
+| `Domain` | Aggregates, events, commands, read model shapes, validation rules, saga definitions (`ISagaDefinition`) | Persistence, transport, UI |
+| `Api` | EF Core persistence, Wolverine sagas, SendGrid email, SignalR hub, HTTP endpoints | Domain logic (delegates to Domain) |
+| `Web` | Blazor WASM PWA, MudBlazor UI, ClientStore, local projections, command dispatch | Domain logic (uses Domain directly) |
 | `Mcp.Tools` | Standard MCP tools (official SDK), one tool per capability | Domain logic (delegates to Api) |
 | `Mcp.Composite` | Plan/Execute endpoints, `$result[N]` chaining | Domain logic (delegates to Api) |
 | `AppHost` | Local service wiring, resource definitions | Any runtime logic |
@@ -71,6 +73,7 @@ TodoList.sln
 
 ### Rationale for separate projects
 
+- `Domain` has no server-side dependencies (no EF Core, no Wolverine, no ASP.NET) — safe to reference from Blazor WASM
 - `Api`, `Web`, `Mcp.Tools`, `Mcp.Composite` are separate deployables — they run as independent Container Apps
 - Agents choose which agent-native interface to install: `Mcp.Tools` for interactive/conversational use (Claude Desktop, Claude Code), `Mcp.Composite` for agentic loops that want to minimise round trips
 - `AppHost` is a hard requirement of .NET Aspire

@@ -6,6 +6,40 @@
 
 ---
 
+## 0. Shared Domain Project
+
+A new `TodoList.Domain` project is the single home for all domain types. Both the API server and the Blazor WASM client reference it directly.
+
+```
+TodoList.Domain/
+  Aggregates/
+    Todo.cs
+    CategoryList.cs
+  Events/
+    TodoEvents.cs
+    CategoryListEvents.cs
+  Commands/
+    TodoCommands.cs
+    CategoryListCommands.cs
+  ReadModels/
+    TodoSummary.cs
+    CategorySummary.cs
+  Validation/
+    TodoValidator.cs
+    CategoryValidator.cs
+  Sagas/
+    ISagaDefinition.cs        // marker interface — sagas declare initiating message type
+```
+
+**Why shared:**
+- Client runs the same validation rules before dispatching commands — no duplication, no drift
+- Client projects events into local read models using the same projector logic
+- Client reflects over `ISagaDefinition` implementations at runtime to know which commands initiate server-side background work — no static list to maintain, no build step, no network call
+
+**Constraints:** `TodoList.Domain` must have no server-side dependencies (no EF Core, no Wolverine, no ASP.NET). Pure .NET — safe for WASM.
+
+---
+
 ## 1. Aggregates
 
 ### CategoryList
@@ -34,7 +68,7 @@ public class CategoryList
 public record Category(Guid Id, string Name, string Color, string Icon, int Order, DateTimeOffset CreatedAt);
 ```
 
-**Default seed categories** (created on first login via a `UserSeeded` event handler):
+**Default seed categories** (created when `CategoryList.Create(userId)` is called on first login):
 
 | Name     | Color     | Icon            |
 |----------|-----------|-----------------|
