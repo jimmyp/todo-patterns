@@ -1,0 +1,10 @@
+@* TodoList.Web/Client/Components/UnsyncedDot.razor *@
+
+@if (Show)
+{
+    <span class="unsynced-dot" title="Not yet synced to server"></span>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+}

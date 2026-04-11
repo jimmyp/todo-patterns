@@ -1,0 +1,17 @@
+@* TodoList.Web/Client/Components/ConflictWarning.razor *@
+
+@if (Show)
+{
+    <MudTooltip Text="@(Message ?? "Couldn't be saved — review and correct")">
+        <MudIcon Icon="@Icons.Material.Filled.Warning"
+                 Size="Size.Small"
+                 Style="color:var(--warning);cursor:pointer;"
+                 @onclick="OnClick" />
+    </MudTooltip>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+}
