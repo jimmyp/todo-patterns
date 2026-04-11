@@ -18,18 +18,18 @@ public class TodoExtendedEndpointTests(ApiFixture fixture) : IClassFixture<ApiFi
         var opResponse = await fixture.Client.GetAsync(location);
         opResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var todos = await fixture.Client.GetFromJsonAsync<dynamic[]>("/todos");
-        todos.Should().Contain(t => t!.GetProperty("title").GetString() == "Test task");
+        var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
+        todos.Should().Contain(t => t.GetProperty("title").GetString() == "Test task");
     }
 
     [Fact]
     public async Task RenameTodo_updates_title()
     {
         var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "Original" });
-        var opId = (await createResponse.Content.ReadFromJsonAsync<dynamic>())!.GetProperty("operationId").GetString();
+        var opId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("operationId").GetString();
         await fixture.Client.GetAsync($"/todos/operations/{opId}");
 
-        var todos = await fixture.Client.GetFromJsonAsync<dynamic[]>("/todos");
+        var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
         var id = todos![0].GetProperty("id").GetString();
 
         var renameResponse = await fixture.Client.PostAsJsonAsync($"/todos/{id}/rename", new { title = "Renamed" });
@@ -40,9 +40,9 @@ public class TodoExtendedEndpointTests(ApiFixture fixture) : IClassFixture<ApiFi
     public async Task UpdateProgress_returns_422_for_out_of_range()
     {
         var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "Task" });
-        var opId = (await createResponse.Content.ReadFromJsonAsync<dynamic>())!.GetProperty("operationId").GetString();
+        var opId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("operationId").GetString();
         await fixture.Client.GetAsync($"/todos/operations/{opId}");
-        var todos = await fixture.Client.GetFromJsonAsync<dynamic[]>("/todos");
+        var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
         var id = todos![0].GetProperty("id").GetString();
 
         var response = await fixture.Client.PostAsJsonAsync($"/todos/{id}/update-progress", new { progress = 150 });
