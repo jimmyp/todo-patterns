@@ -1,0 +1,65 @@
+:root {
+    --bg-app: #0B0D10;
+    --bg-surface: #161920;
+    --bg-surface-hover: #1F242D;
+    --text-main: #E2E8F0;
+    --text-muted: #8492A6;
+    --border: #1F242D;
+    --primary: #8B5CF6;
+    --success: #00FF9D;
+    --error: #EF4444;
+    --warning: #F59E0B;
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --radius: 4px;
+    --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html, body {
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    font-family: var(--font-body);
+}
+
+.mud-typography-h1,
+.mud-typography-h2,
+.mud-typography-h3,
+.mud-typography-h4,
+.mud-typography-h5,
+.mud-typography-h6 {
+    font-family: var(--font-heading);
+}
+
+.font-mono {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.unsynced-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--text-muted);
+    display: inline-block;
+}
+
+.task-row--completed {
+    opacity: 0.6;
+}
+
+.task-row--completed .mud-typography {
+    text-decoration: line-through;
+}
+
+.category-card {
+    position: relative;
+    border-left: 4px solid transparent;
+    transition: border-color var(--transition);
+}
+
+.category-card:hover {
+    border-color: var(--primary);
+}
