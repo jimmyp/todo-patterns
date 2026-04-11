@@ -34,6 +34,7 @@ No separate "offline mode". No spinners for pending commands while offline. A su
   timestamp: ISO8601
   source: "client" | "server"
   confirmed: boolean          // false = speculative
+  conflicted: boolean         // true = server returned 422, awaiting user correction
 }
 ```
 
@@ -148,17 +149,16 @@ CommandDispatcher.dispatch(command)
 POST to API endpoint               Command stays in log (synced: false)
   with X-Expected-Version header   UI shows unsynced dot on item
   ↓                                (no spinner)
-202 Accepted + operation ID
+202 Accepted + Location header
   ↓
-Poll GET /operations/{id}
+Redirect to GET /operations/{id}
+  (poll until status != pending/processing)
   ↓
 200 { status: "complete", event: Event }
   ↓
 ClientEventLog.replaceSpeculative(aggregateId, [confirmedEvent])
   ↓
-Rebuild read model
-  ↓
-Remove unsynced dot
+Rebuild read model → remove unsynced dot
 ```
 
 ### On reconnect
@@ -213,9 +213,18 @@ Used by:
 |---|---|
 | Transient (5xx, network error) | Retry up to 3× with exponential backoff (200ms, 400ms, 800ms) |
 | Conflict (409) | Apply conflict resolution flow (section 6) |
+| Validation (422) | Mark speculative event as `conflicted`; show toast: *"'[title]' couldn't be saved — [message]. [Review]"*; Review navigates to item/form with server validation errors shown inline; Cancel discards speculative event and rebuilds read model |
+| Not found (404) on delete/complete | Treat as success — aggregate already gone; discard command, remove speculative event, rebuild read model |
 | Auth (401) | Redirect to `/login` |
-| Client error (4xx other) | Discard command, show error snackbar, no redo offered |
+| Other 4xx | Discard command, remove speculative event, rebuild read model, show error snackbar |
 | All retries exhausted | Persistent `MudAlert` (error severity): "Some changes couldn't sync. [Retry]" |
+
+### Conflicted state
+
+A speculative event marked `conflicted` (from a 422 response):
+- Shows a warning icon on the affected item (distinct from the unsynced dot)
+- Persists until the user taps Review and either corrects + resubmits or cancels
+- Resubmit dispatches a new command with the corrected payload and current `expectedVersion`
 
 ---
 
