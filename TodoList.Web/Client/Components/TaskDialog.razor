@@ -1,0 +1,107 @@
+@* TodoList.Web/Client/Components/TaskDialog.razor *@
+@using TodoList.Domain.ReadModels
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-family:var(--font-heading);">
+            @(IsEdit ? "Edit Task" : "Add Task")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="Title"
+                          Label="Title"
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          RequiredError="Title is required"
+                          Immediate="true"
+                          Style="--mud-palette-text-primary:var(--text-main);" />
+
+            <MudSelect T="string"
+                       @bind-Value="SelectedCategoryId"
+                       Label="Category (optional)"
+                       Variant="Variant.Outlined"
+                       Clearable="true">
+                @foreach (var cat in Categories)
+                {
+                    <MudSelectItem T="string" Value="@cat.Id.ToString()">
+                        <div style="display:flex;align-items:center;gap:0.5rem;">
+                            <span style="@($"width:10px;height:10px;border-radius:2px;background:{cat.Color};display:inline-block;")"></span>
+                            @cat.Name
+                        </div>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudDatePicker @bind-Date="DueDate"
+                           Label="Due date (optional)"
+                           Variant="Variant.Outlined"
+                           Clearable="true" />
+
+            <MudTextField @bind-Value="Notes"
+                          Label="Notes (optional)"
+                          Variant="Variant.Outlined"
+                          Lines="3"
+                          Immediate="true" />
+
+            <MudSlider @bind-Value="Progress"
+                       Min="0"
+                       Max="100"
+                       Step="5"
+                       Color="Color.Primary">
+                Progress: @Progress%
+            </MudSlider>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Style="color:var(--text-muted);">Cancel</MudButton>
+        <MudButton OnClick="Submit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@string.IsNullOrWhiteSpace(Title)">
+            @(IsEdit ? "Save" : "Add")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public string? InitialTitle { get; set; }
+    [Parameter] public string? InitialCategoryId { get; set; }
+    [Parameter] public DateTime? InitialDueDate { get; set; }
+    [Parameter] public string? InitialNotes { get; set; }
+    [Parameter] public int InitialProgress { get; set; }
+    [Parameter] public IReadOnlyList<CategorySummary> Categories { get; set; } = [];
+
+    private string Title { get; set; } = "";
+    private string? SelectedCategoryId { get; set; }
+    private DateTime? DueDate { get; set; }
+    private string? Notes { get; set; }
+    private int Progress { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Title = InitialTitle ?? "";
+        SelectedCategoryId = InitialCategoryId;
+        DueDate = InitialDueDate;
+        Notes = InitialNotes;
+        Progress = InitialProgress;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (string.IsNullOrWhiteSpace(Title)) return;
+        MudDialog.Close(DialogResult.Ok(new TaskDialogResult
+        {
+            Title = Title,
+            CategoryId = SelectedCategoryId,
+            DueDate = DueDate.HasValue ? new DateTimeOffset(DueDate.Value, TimeSpan.Zero) : null,
+            Notes = Notes,
+            Progress = Progress
+        }));
+    }
+}
