@@ -1,0 +1,68 @@
+@* TodoList.Web/Client/Layout/MainLayout.razor *@
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+
+<MudLayout>
+    @* Desktop: persistent left drawer *@
+    <MudDrawer @bind-Open="_drawerOpen"
+               Variant="@DrawerVariant"
+               ClipMode="DrawerClipMode.Always"
+               Elevation="1"
+               Width="240px"
+               Style="background:var(--bg-surface);">
+        <MudDrawerHeader Style="padding: 1.5rem 1rem 1rem;">
+            <MudText Typo="Typo.h6" Style="font-family:var(--font-heading);color:var(--primary);font-weight:700;">
+                TodoList
+            </MudText>
+        </MudDrawerHeader>
+        <NavMenu />
+        <MudSpacer />
+        <UserProfileStrip />
+    </MudDrawer>
+
+    @* Mobile: top app bar *@
+    <MudAppBar Elevation="1"
+               Style="background:var(--bg-surface);display:none;"
+               Class="d-flex d-md-none">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6" Style="font-family:var(--font-heading);color:var(--primary);font-weight:700;">
+            TodoList
+        </MudText>
+    </MudAppBar>
+
+    <MudMainContent Style="background:var(--bg-app);min-height:100vh;padding-top:0;">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Style="padding: 1.5rem;">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+
+    @* Mobile: bottom navigation *@
+    <MudBottomNavigation SelectedIndex="_bottomNavIndex"
+                         SelectedIndexChanged="OnBottomNavChanged"
+                         Style="background:var(--bg-surface);display:none;"
+                         Class="d-flex d-md-none">
+        <MudBottomNavigationItem Label="Todos" Icon="@Icons.Material.Filled.CheckCircle" />
+        <MudBottomNavigationItem Label="Categories" Icon="@Icons.Material.Filled.Category" />
+    </MudBottomNavigation>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private int _bottomNavIndex = 0;
+
+    private DrawerVariant DrawerVariant =>
+        _isMobile ? DrawerVariant.Temporary : DrawerVariant.Persistent;
+
+    private bool _isMobile = false;
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private void OnBottomNavChanged(int index)
+    {
+        _bottomNavIndex = index;
+        Nav.NavigateTo(index == 0 ? "/" : "/categories");
+    }
+}

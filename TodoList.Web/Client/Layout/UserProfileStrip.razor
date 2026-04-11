@@ -1,0 +1,28 @@
+@* TodoList.Web/Client/Layout/UserProfileStrip.razor *@
+
+<div style="padding: 1rem; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0.75rem;">
+    <MudAvatar Style="width:32px;height:32px;background:var(--primary);">
+        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+    </MudAvatar>
+    <div style="flex:1;min-width:0;">
+        <MudText Typo="Typo.body2" Style="color:var(--text-main);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            Jim
+        </MudText>
+        <MudText Typo="Typo.caption" Style="color:var(--text-muted);">
+            jim@example.com
+        </MudText>
+    </div>
+    <MudIconButton Icon="@Icons.Material.Filled.Logout"
+                   Size="Size.Small"
+                   Style="color:var(--text-muted);"
+                   OnClick="Logout"
+                   Title="Sign out" />
+</div>
+
+@code {
+    private void Logout()
+    {
+        // Plan C will POST to /auth/logout via HttpClient
+        // For now, navigate to login page
+    }
+}
