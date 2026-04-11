@@ -7,7 +7,7 @@ var api = builder.AddProject<Projects.TodoList_Api>("api")
     .WithReference(sql)
     .WaitFor(sql);
 
-builder.AddProject<Projects.TodoList_Web>("web")
+builder.AddProject<Projects.TodoList_Web_Server>("web")
     .WithReference(api)
     .WaitFor(api);
 

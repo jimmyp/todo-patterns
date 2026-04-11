@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TodoList.Api\TodoList.Api.csproj" />
-    <ProjectReference Include="..\TodoList.Web\TodoList.Web.csproj" />
+    <ProjectReference Include="..\TodoList.Web\Server\TodoList.Web.Server.csproj" />
   </ItemGroup>
 
   <ItemGroup>
