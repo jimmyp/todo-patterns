@@ -1,10 +1,13 @@
 @* TodoList.Web/Client/Pages/TodoDetail.razor *@
 @page "/todos/{Id}"
+@using System.Text.Json
 @using TodoList.Domain.ReadModels
+@using TodoList.Web.Client.Store
 @inject ILocalTodoStore TodoStore
 @inject ILocalCategoryStore CategoryStore
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject CommandDispatcher Dispatcher
 @implements IDisposable
 
 <PageTitle>@(_todo?.Title ?? "Task")</PageTitle>
@@ -127,42 +130,214 @@ else
         InvokeAsync(StateHasChanged);
     }
 
-    private void SaveTitle()
+    private async Task SaveTitle()
     {
         if (_todo == null || _title == _todo.Title) return;
-        // Plan C dispatches RenameTodoCommand
-        Snackbar.Add("Title saved (not yet wired to API)", Severity.Info);
+        var command = new ClientCommand
+        {
+            AggregateId = _todo.Id.ToString(),
+            ExpectedVersion = 0,
+            Type = nameof(TodoList.Domain.Commands.RenameTodoCommand),
+            Payload = JsonSerializer.SerializeToElement(new { newTitle = _title }),
+            ApiEndpoint = $"/todos/{_todo.Id}/rename",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = _todo.Id.ToString(),
+            AggregateVersion = 1,
+            Type = "TodoRenamed",
+            Payload = JsonSerializer.SerializeToElement(new { newTitle = _title }),
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
     }
 
-    private void SaveCategory(string? value)
+    private async Task SaveCategory(string? value)
     {
+        if (_todo == null) return;
         _categoryId = value;
-        // Plan C dispatches AssignCategoryCommand / UnassignCategoryCommand
-        Snackbar.Add("Category saved (not yet wired to API)", Severity.Info);
+
+        if (string.IsNullOrEmpty(value))
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = _todo.Id.ToString(),
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.UnassignCategoryCommand),
+                Payload = null,
+                ApiEndpoint = $"/todos/{_todo.Id}/category",
+                HttpMethod = "DELETE",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = _todo.Id.ToString(),
+                AggregateVersion = 1,
+                Type = "TodoCategoryUnassigned",
+                Payload = null,
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+        else
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = _todo.Id.ToString(),
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.AssignCategoryCommand),
+                Payload = JsonSerializer.SerializeToElement(new { categoryId = value }),
+                ApiEndpoint = $"/todos/{_todo.Id}/category",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = _todo.Id.ToString(),
+                AggregateVersion = 1,
+                Type = "TodoCategoryAssigned",
+                Payload = JsonSerializer.SerializeToElement(new { categoryId = value }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
     }
 
-    private void SaveDueDate(DateTime? value)
+    private async Task SaveDueDate(DateTime? value)
     {
+        if (_todo == null) return;
         _dueDate = value;
-        // Plan C dispatches SetDueDateCommand / ClearDueDateCommand
-        Snackbar.Add("Due date saved (not yet wired to API)", Severity.Info);
+
+        if (value == null)
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = _todo.Id.ToString(),
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.ClearDueDateCommand),
+                Payload = null,
+                ApiEndpoint = $"/todos/{_todo.Id}/due-date",
+                HttpMethod = "DELETE",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = _todo.Id.ToString(),
+                AggregateVersion = 1,
+                Type = "TodoDueDateCleared",
+                Payload = null,
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+        else
+        {
+            var dueDate = new DateTimeOffset(value.Value, TimeSpan.Zero);
+            var command = new ClientCommand
+            {
+                AggregateId = _todo.Id.ToString(),
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.SetDueDateCommand),
+                Payload = JsonSerializer.SerializeToElement(new { dueDate }),
+                ApiEndpoint = $"/todos/{_todo.Id}/due-date",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = _todo.Id.ToString(),
+                AggregateVersion = 1,
+                Type = "TodoDueDateSet",
+                Payload = JsonSerializer.SerializeToElement(new { dueDate }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
     }
 
-    private void SaveNotes()
+    private async Task SaveNotes()
     {
-        // Plan C dispatches UpdateNotesCommand
-        Snackbar.Add("Notes saved (not yet wired to API)", Severity.Info);
+        if (_todo == null) return;
+        var command = new ClientCommand
+        {
+            AggregateId = _todo.Id.ToString(),
+            ExpectedVersion = 0,
+            Type = nameof(TodoList.Domain.Commands.UpdateNotesCommand),
+            Payload = JsonSerializer.SerializeToElement(new { notes = _notes }),
+            ApiEndpoint = $"/todos/{_todo.Id}/notes",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = _todo.Id.ToString(),
+            AggregateVersion = 1,
+            Type = "TodoNotesUpdated",
+            Payload = JsonSerializer.SerializeToElement(new { notes = _notes }),
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
     }
 
-    private void SaveProgress(int value)
+    private async Task SaveProgress(int value)
     {
-        // Plan C dispatches UpdateProgressCommand
-        Snackbar.Add("Progress saved (not yet wired to API)", Severity.Info);
+        if (_todo == null) return;
+        var command = new ClientCommand
+        {
+            AggregateId = _todo.Id.ToString(),
+            ExpectedVersion = 0,
+            Type = nameof(TodoList.Domain.Commands.UpdateProgressCommand),
+            Payload = JsonSerializer.SerializeToElement(new { progress = value }),
+            ApiEndpoint = $"/todos/{_todo.Id}/progress",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = _todo.Id.ToString(),
+            AggregateVersion = 1,
+            Type = "TodoProgressUpdated",
+            Payload = JsonSerializer.SerializeToElement(new { progress = value }),
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
     }
 
-    private void HandleDelete()
+    private async Task HandleDelete()
     {
-        // Plan C dispatches DeleteTodoCommand then navigates back
+        if (_todo == null) return;
+        var command = new ClientCommand
+        {
+            AggregateId = _todo.Id.ToString(),
+            ExpectedVersion = 0,
+            Type = nameof(TodoList.Domain.Commands.DeleteTodoCommand),
+            Payload = null,
+            ApiEndpoint = $"/todos/{_todo.Id}",
+            HttpMethod = "DELETE",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = _todo.Id.ToString(),
+            AggregateVersion = 1,
+            Type = "TodoDeleted",
+            Payload = null,
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
         Nav.NavigateTo("/");
     }
 

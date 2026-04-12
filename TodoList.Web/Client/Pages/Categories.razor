@@ -1,9 +1,12 @@
 @* TodoList.Web/Client/Pages/Categories.razor *@
 @page "/categories"
+@using System.Text.Json
 @using TodoList.Domain.ReadModels
+@using TodoList.Web.Client.Store
 @inject ILocalCategoryStore CategoryStore
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject CommandDispatcher Dispatcher
 @implements IDisposable
 
 <PageTitle>Categories</PageTitle>
@@ -51,6 +54,8 @@
 
 @code {
     private bool _newCardHover;
+    // CategoryList aggregate uses a fixed ID — in a real app this would be the user's ID
+    private const string CategoryListAggregateId = "user-category-list";
 
     protected override void OnInitialized() => CategoryStore.OnChange += StateHasChanged;
 
@@ -64,7 +69,26 @@
         var result = await dialog.Result;
         if (!result.Canceled && result.Data is CategoryDialogResult data)
         {
-            Snackbar.Add($"'{data.Name}' created (not yet wired to API)", Severity.Info);
+            var command = new ClientCommand
+            {
+                AggregateId = CategoryListAggregateId,
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.AddCategoryCommand),
+                Payload = JsonSerializer.SerializeToElement(new { name = data.Name, color = data.Color, icon = data.Icon }),
+                ApiEndpoint = "/categories",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = CategoryListAggregateId,
+                AggregateVersion = 1,
+                Type = "CategoryAdded",
+                Payload = JsonSerializer.SerializeToElement(new { name = data.Name, color = data.Color, icon = data.Icon }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
         }
     }
 
@@ -81,13 +105,52 @@
         var result = await dialog.Result;
         if (!result.Canceled && result.Data is CategoryDialogResult data)
         {
-            Snackbar.Add($"'{data.Name}' updated (not yet wired to API)", Severity.Info);
+            var command = new ClientCommand
+            {
+                AggregateId = CategoryListAggregateId,
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.RenameCategoryCommand),
+                Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id, newName = data.Name }),
+                ApiEndpoint = $"/categories/{cat.Id}/rename",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = CategoryListAggregateId,
+                AggregateVersion = 1,
+                Type = "CategoryRenamed",
+                Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id, newName = data.Name }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
         }
     }
 
-    private void HandleDelete(CategorySummary cat)
+    private async Task HandleDelete(CategorySummary cat)
     {
-        Snackbar.Add($"'{cat.Name}' deleted (not yet wired to API)", Severity.Warning);
+        var command = new ClientCommand
+        {
+            AggregateId = CategoryListAggregateId,
+            ExpectedVersion = 0,
+            Type = nameof(TodoList.Domain.Commands.RemoveCategoryCommand),
+            Payload = null,
+            ApiEndpoint = $"/categories/{cat.Id}",
+            HttpMethod = "DELETE",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = CategoryListAggregateId,
+            AggregateVersion = 1,
+            Type = "CategoryRemoved",
+            Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id }),
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
     }
 
     public void Dispose() => CategoryStore.OnChange -= StateHasChanged;

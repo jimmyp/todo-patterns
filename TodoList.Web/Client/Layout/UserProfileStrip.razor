@@ -1,4 +1,6 @@
 @* TodoList.Web/Client/Layout/UserProfileStrip.razor *@
+@inject HttpClient Http
+@inject NavigationManager Nav
 
 <div style="padding: 1rem; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0.75rem;">
     <MudAvatar Style="width:32px;height:32px;background:var(--primary);">
@@ -20,9 +22,9 @@
 </div>
 
 @code {
-    private void Logout()
+    private async Task Logout()
     {
-        // Plan C will POST to /auth/logout via HttpClient
-        // For now, navigate to login page
+        await Http.PostAsync("/auth/logout", null);
+        Nav.NavigateTo("/login", forceLoad: true);
     }
 }

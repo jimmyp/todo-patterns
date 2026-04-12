@@ -1,10 +1,13 @@
 @* TodoList.Web/Client/Pages/TodoList.razor *@
 @page "/"
+@using System.Text.Json
 @using TodoList.Domain.ReadModels
+@using TodoList.Web.Client.Store
 @inject ILocalTodoStore TodoStore
 @inject ILocalCategoryStore CategoryStore
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject CommandDispatcher Dispatcher
 @implements IDisposable
 
 <PageTitle>Todo List</PageTitle>
@@ -117,8 +120,34 @@
         var result = await dialog.Result;
         if (!result.Canceled && result.Data is TaskDialogResult data)
         {
-            // Plan C will dispatch CreateTodoCommand here
-            Snackbar.Add($"'{data.Title}' added (not yet wired to API)", Severity.Info);
+            var newId = Guid.NewGuid().ToString();
+            var command = new ClientCommand
+            {
+                AggregateId = newId,
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.CreateTodoCommand),
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    title = data.Title,
+                    categoryId = data.CategoryId,
+                    dueDate = data.DueDate,
+                    notes = data.Notes,
+                    progress = data.Progress
+                }),
+                ApiEndpoint = "/todos",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = newId,
+                AggregateVersion = 1,
+                Type = "TodoCreated",
+                Payload = JsonSerializer.SerializeToElement(new { id = newId, title = data.Title }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
         }
     }
 
@@ -138,21 +167,80 @@
         var result = await dialog.Result;
         if (!result.Canceled && result.Data is TaskDialogResult data)
         {
-            // Plan C will dispatch update commands
-            Snackbar.Add($"'{data.Title}' updated (not yet wired to API)", Severity.Info);
+            var command = new ClientCommand
+            {
+                AggregateId = todo.Id.ToString(),
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.RenameTodoCommand),
+                Payload = JsonSerializer.SerializeToElement(new { newTitle = data.Title }),
+                ApiEndpoint = $"/todos/{todo.Id}/rename",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = todo.Id.ToString(),
+                AggregateVersion = 1,
+                Type = "TodoRenamed",
+                Payload = JsonSerializer.SerializeToElement(new { newTitle = data.Title }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
         }
     }
 
-    private void HandleComplete(TodoSummary todo, bool completed)
+    private async Task HandleComplete(TodoSummary todo, bool completed)
     {
-        // Plan C will dispatch CompleteTodoCommand / unimplemented for now
-        Snackbar.Add($"'{todo.Title}' {(completed ? "completed" : "uncompleted")} (not yet wired to API)", Severity.Info);
+        var command = new ClientCommand
+        {
+            AggregateId = todo.Id.ToString(),
+            ExpectedVersion = 0,
+            Type = completed
+                ? nameof(TodoList.Domain.Commands.CompleteTodoCommand)
+                : nameof(TodoList.Domain.Commands.UncompleteTodoCommand),
+            Payload = null,
+            ApiEndpoint = completed ? $"/todos/{todo.Id}/complete" : $"/todos/{todo.Id}/uncomplete",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = todo.Id.ToString(),
+            AggregateVersion = 1,
+            Type = completed ? "TodoCompleted" : "TodoUncompleted",
+            Payload = completed
+                ? JsonSerializer.SerializeToElement(new { completedAt = DateTimeOffset.UtcNow })
+                : (System.Text.Json.JsonElement?)null,
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
     }
 
-    private void HandleDelete(TodoSummary todo)
+    private async Task HandleDelete(TodoSummary todo)
     {
-        // Plan C will dispatch DeleteTodoCommand
-        Snackbar.Add($"'{todo.Title}' deleted (not yet wired to API)", Severity.Warning);
+        var command = new ClientCommand
+        {
+            AggregateId = todo.Id.ToString(),
+            ExpectedVersion = 0,
+            Type = nameof(TodoList.Domain.Commands.DeleteTodoCommand),
+            Payload = null,
+            ApiEndpoint = $"/todos/{todo.Id}",
+            HttpMethod = "DELETE",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = todo.Id.ToString(),
+            AggregateVersion = 1,
+            Type = "TodoDeleted",
+            Payload = null,
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
     }
 
     public void Dispose() => TodoStore.OnChange -= RefreshLists;
