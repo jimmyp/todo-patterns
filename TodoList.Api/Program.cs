@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TodoList.Api.Data;
 using TodoList.Api.Endpoints;
 using TodoList.Api.EventHandlers;
+using TodoList.Api.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +22,8 @@ builder.Services.AddScoped<CategoryProjectionHandler>();
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<TodoDbContext>(tags: ["ready"]);
 
+builder.Services.AddSignalR();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -37,6 +40,7 @@ app.MapDefaultEndpoints();   // registers /health/live and /health/ready
 app.MapTodoEndpoints();
 app.MapOperationEndpoints();
 app.MapCategoryEndpoints();
+app.MapHub<EventHub>("/hubs/events");
 
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
