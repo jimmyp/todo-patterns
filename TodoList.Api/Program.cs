@@ -7,6 +7,8 @@ using TodoList.Api.Data;
 using TodoList.Api.Endpoints;
 using TodoList.Api.EventHandlers;
 using TodoList.Api.Hubs;
+using Wolverine;
+using Wolverine.SqlServer;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -82,9 +84,27 @@ builder.Services.AddScoped<CategoryProjectionHandler>();
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<TodoDbContext>(tags: ["ready"]);
 
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
-
 builder.Services.AddOpenApi();
+
+// Register saga definitions for client discovery
+builder.Services.AddSingleton<TodoList.Domain.Sagas.ISagaDefinition, TodoList.Api.Sagas.DueReminderSagaDefinition>();
+
+// Wolverine message bus — in-memory transport for local dev and tests
+builder.Host.UseWolverine(opts =>
+{
+    // Default Wolverine uses local in-memory queues — no transport config needed for dev/tests
+    opts.Discovery.IncludeAssembly(typeof(Program).Assembly);
+
+    // SQL Server durability / outbox only in non-test environments
+    if (!builder.Environment.IsEnvironment("Testing"))
+    {
+        var cs = builder.Configuration.GetConnectionString("todolist");
+        if (!string.IsNullOrEmpty(cs))
+            opts.PersistMessagesWithSqlServer(cs, "wolverine");
+    }
+});
 
 var app = builder.Build();
 
