@@ -61,5 +61,5 @@
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "DOTNET_ROOT": "/usr/local/dotnet",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
-  }"postCreateCommand": "",
+  }
 }
