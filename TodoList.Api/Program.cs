@@ -136,3 +136,6 @@ app.Run();
 
 // Allow WebApplicationFactory to find Program class
 public partial class Program { }
+
+// Disambiguating marker for integration tests that reference both Api and Mcp.Composite
+public partial class ApiProgram { }

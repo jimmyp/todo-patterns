@@ -71,14 +71,14 @@ public class ApiFixture : IAsyncLifetime
         (Environment.GetEnvironmentVariable("REMOTE_CONTAINERS") is not null) ||
         (Environment.GetEnvironmentVariable("CODESPACES") is not null);
 
-    private WebApplicationFactory<Program>? _factory;
+    private WebApplicationFactory<ApiProgram>? _factory;
     public HttpClient Client { get; private set; } = null!;
 
     public async Task InitializeAsync()
     {
         await _sql.StartAsync();
 
-        _factory = new WebApplicationFactory<Program>()
+        _factory = new WebApplicationFactory<ApiProgram>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
