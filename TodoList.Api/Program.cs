@@ -18,10 +18,10 @@ builder.AddSqlServerDbContext<TodoDbContext>("todolist", settings =>
 });
 
 // Identity DbContext — same SQL Server instance, separate context for identity schema
-builder.Services.AddDbContext<AppIdentityDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("todolist")));
+// AddDbContextFactory registers both the factory (singleton) and scoped DbContext
 builder.Services.AddDbContextFactory<AppIdentityDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("todolist")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("todolist")),
+    ServiceLifetime.Scoped);
 
 // ASP.NET Core Identity
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
