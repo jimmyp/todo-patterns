@@ -13,15 +13,24 @@ public class ApiFixture : IAsyncLifetime
 
     public ApiFixture()
     {
-        // Docker-outside-of-docker: ports are mapped on the host (macOS), not on localhost inside
-        // the dev container. Tell Testcontainers to connect via host.docker.internal instead.
-        Environment.SetEnvironmentVariable("TESTCONTAINERS_HOST_OVERRIDE", "host.docker.internal");
-        // Ryuk (cleanup container) can't bind-mount the Docker socket in docker-outside-of-docker.
-        Environment.SetEnvironmentVariable("TESTCONTAINERS_RYUK_DISABLED", "true");
-        _sql = new MsSqlBuilder()
-            .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
+        // Inside a dev container using docker-outside-of-docker, mapped ports are accessible on
+        // the host machine, not on localhost inside the container — use host.docker.internal.
+        // Outside a dev container (native macOS/Linux), localhost works fine.
+        if (IsRunningInContainer())
+        {
+            Environment.SetEnvironmentVariable("TESTCONTAINERS_HOST_OVERRIDE", "host.docker.internal");
+            // Ryuk can't bind-mount the Docker socket in docker-outside-of-docker.
+            Environment.SetEnvironmentVariable("TESTCONTAINERS_RYUK_DISABLED", "true");
+        }
+
+        _sql = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
             .Build();
     }
+
+    private static bool IsRunningInContainer() =>
+        File.Exists("/.dockerenv") ||
+        (Environment.GetEnvironmentVariable("REMOTE_CONTAINERS") is not null) ||
+        (Environment.GetEnvironmentVariable("CODESPACES") is not null);
 
     private WebApplicationFactory<Program>? _factory;
     public HttpClient Client { get; private set; } = null!;
