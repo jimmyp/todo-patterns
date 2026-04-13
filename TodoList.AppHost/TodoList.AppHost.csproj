@@ -3,6 +3,8 @@
   <ItemGroup>
     <ProjectReference Include="..\TodoList.Api\TodoList.Api.csproj" />
     <ProjectReference Include="..\TodoList.Web\Server\TodoList.Web.Server.csproj" />
+    <ProjectReference Include="..\TodoList.Mcp.Tools\TodoList.Mcp.Tools.csproj" />
+    <ProjectReference Include="..\TodoList.Mcp.Composite\TodoList.Mcp.Composite.csproj" />
   </ItemGroup>
 
   <ItemGroup>
