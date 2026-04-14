@@ -67,27 +67,29 @@ public record CreateTodoRequest(
     int? Progress = null);
 ```
 
-If optional fields are provided, the Wolverine command handler dispatches the additional domain methods (`AssignCategory`, `SetDueDate`, `UpdateNotes`, `UpdateProgress`) after `Todo.Create()` in the same operation.
+The `Todo.Create()` method accepts all optional fields directly and applies them in one operation — no separate commands dispatched. One command in, one aggregate created with all fields set, one set of events out.
 
 ---
 
 ## 3. Wolverine Dispatch
 
-Every mutating endpoint calls `IMessageBus.InvokeAsync<T>(command)` instead of loading aggregates directly. The endpoint becomes a thin adapter: parse request → build command → `bus.InvokeAsync` → return 202+Location.
+Every mutating endpoint calls `IMessageBus.PublishAsync(command)` and returns 202+Location immediately — the endpoint does not wait for the command to be handled. The endpoint is a thin adapter: parse request → build command → publish to bus → return 202+Location.
 
-Wolverine command handlers live in `TodoList.Api/Handlers/` — one handler per command type. Each handler loads the aggregate, calls the domain method, saves, updates projections, and returns the operation result.
+Wolverine command handlers live in `TodoList.Api/Handlers/` — one handler per command type. Each handler loads the aggregate, calls the domain method, saves, and publishes the resulting domain events to Wolverine. Projection updates happen in separate event handlers that subscribe to those domain events — command handlers do not update projections directly.
 
 GET endpoints stay as direct projection queries — no bus needed for reads.
 
-The existing `DueReminderSaga` fires naturally because events flow through Wolverine after the command handler completes.
+The existing `DueReminderSaga` fires naturally because domain events flow through Wolverine after the command handler publishes them.
 
 ---
 
 ## 4. Saga Detection Fix
 
-Move both `DueReminderSagaDefinition` and `DueReminderSaga` to `TodoList.Domain/Sagas/`. The saga is pure domain logic (state transitions, message routing) with no server dependencies. `NotificationHandlers` stays in `TodoList.Api` — it does the actual I/O.
+Move `DueReminderSaga` to `TodoList.Domain/Sagas/`. The saga is pure domain logic (state transitions, message routing) with no server dependencies. `NotificationHandlers` stays in `TodoList.Api` — it does the actual I/O.
 
-- Client reflects over `TodoList.Domain` assembly → finds `DueReminderSagaDefinition` → shows saga toast
+Delete `ISagaDefinition` and `DueReminderSagaDefinition`. They're unnecessary indirection — `CommandDispatcher` can reflect over `Saga<T>` subclasses in `TodoList.Domain` and inspect their `Start` methods to discover which command types initiate sagas.
+
+- Client reflects over `TodoList.Domain` assembly → finds `DueReminderSaga` (a `Saga<T>` subclass) → inspects `Start` method parameter type → shows saga toast for that command type
 - Server's Wolverine scans `TodoList.Domain` assembly → finds `DueReminderSaga` → runs it
 
 ---
