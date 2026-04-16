@@ -88,14 +88,13 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
 builder.Services.AddOpenApi();
 
-// Register saga definitions for client discovery
-builder.Services.AddSingleton<TodoList.Domain.Sagas.ISagaDefinition, TodoList.Api.Sagas.DueReminderSagaDefinition>();
-
 // Wolverine message bus — in-memory transport for local dev and tests
 builder.Host.UseWolverine(opts =>
 {
-    // Default Wolverine uses local in-memory queues — no transport config needed for dev/tests
+    // Discover handlers in both Api (command handlers, projection handlers,
+    // cascade handlers, notification handlers) and Domain (sagas)
     opts.Discovery.IncludeAssembly(typeof(Program).Assembly);
+    opts.Discovery.IncludeAssembly(typeof(TodoList.Domain.Sagas.DueReminderSaga).Assembly);
 
     // SQL Server durability / outbox only in non-test environments
     if (!builder.Environment.IsEnvironment("Testing"))

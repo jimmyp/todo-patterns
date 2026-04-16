@@ -1,10 +1,12 @@
 // TodoList.Web/Client/Store/CommandDispatcher.cs
 using System.Net;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Text.Json;
 using MudBlazor;
 using TodoList.Domain.Sagas;
 using TodoList.Web.Client.Services;
+using Wolverine;
 
 namespace TodoList.Web.Client.Store;
 
@@ -16,8 +18,8 @@ public class CommandDispatcher
     private readonly OperationPoller _poller;
     private readonly ISnackbar _snackbar;
 
-    // Populated at startup by reflecting over ISagaDefinition implementations
-    private readonly HashSet<string> _sagaInitiatingCommandTypes;
+    // Populated at startup by reflecting over Wolverine.Saga subclasses in TodoList.Domain
+    private readonly HashSet<string> _sagaInitiatingTypeNames;
 
     public CommandDispatcher(
         IClientStore store,
@@ -32,19 +34,39 @@ public class CommandDispatcher
         _poller = poller;
         _snackbar = snackbar;
 
-        _sagaInitiatingCommandTypes = DiscoverSagaInitiatingTypes();
+        _sagaInitiatingTypeNames = DiscoverSagaInitiatingTypes();
     }
 
+    /// <summary>
+    /// Reflects over Wolverine.Saga subclasses in TodoList.Domain and extracts the first
+    /// parameter type name of each saga's static Start method. The first parameter is the
+    /// triggering domain event by convention (e.g. <c>TodoDueDateSetEvent</c>).
+    ///
+    /// Returned names have the <c>Event</c> suffix stripped to match the <c>Type</c> field
+    /// of <see cref="ClientEvent"/> (e.g. <c>TodoDueDateSet</c>).
+    /// </summary>
     private static HashSet<string> DiscoverSagaInitiatingTypes()
     {
-        // Reflect over all ISagaDefinition implementations in TodoList.Domain
-        var sagaDefType = typeof(ISagaDefinition);
-        return sagaDefType.Assembly
-            .GetTypes()
-            .Where(t => t.IsClass && !t.IsAbstract && sagaDefType.IsAssignableFrom(t))
-            .Select(t => (ISagaDefinition)Activator.CreateInstance(t)!)
-            .Select(s => s.InitiatingCommandType.Name)
-            .ToHashSet();
+        var sagaBase = typeof(Saga);
+        var domainAssembly = typeof(DueReminderSaga).Assembly;
+
+        var results = new HashSet<string>();
+        foreach (var sagaType in domainAssembly.GetTypes()
+                     .Where(t => t.IsClass && !t.IsAbstract && sagaBase.IsAssignableFrom(t)))
+        {
+            var startMethod = sagaType.GetMethod(
+                "Start",
+                BindingFlags.Public | BindingFlags.Static);
+            if (startMethod is null) continue;
+
+            var first = startMethod.GetParameters().FirstOrDefault();
+            if (first is null) continue;
+
+            var name = first.ParameterType.Name;
+            if (name.EndsWith("Event")) name = name[..^"Event".Length];
+            results.Add(name);
+        }
+        return results;
     }
 
     /// <summary>
@@ -60,24 +82,22 @@ public class CommandDispatcher
 
         // 3. Read models rebuild via OnAggregateChanged (already fired by AppendEvent)
 
+        // Match the saga by the speculative event's type — the Start method's first
+        // parameter is the triggering domain event (suffix "Event" stripped).
+        var startsSaga = _sagaInitiatingTypeNames.Contains(speculativeEvent.Type);
+
         // 4. Online: dispatch to server
         if (_connectivity.IsOnline)
         {
-            // Show saga toast if applicable
-            if (_sagaInitiatingCommandTypes.Contains(command.Type))
-            {
-                _snackbar.Add($"Background work will begin shortly.", Severity.Info);
-            }
+            if (startsSaga)
+                _snackbar.Add("Background work will begin shortly.", Severity.Info);
 
             await DispatchToServer(command, speculativeEvent.AggregateId);
         }
         else
         {
-            // Offline: show saga toast noting it will happen on reconnect
-            if (_sagaInitiatingCommandTypes.Contains(command.Type))
-            {
-                _snackbar.Add($"This action will begin when you're back online.", Severity.Info);
-            }
+            if (startsSaga)
+                _snackbar.Add("This action will begin when you're back online.", Severity.Info);
             // Command stays queued — SyncService replays on reconnect
         }
 

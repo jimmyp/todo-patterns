@@ -1,6 +1,6 @@
 // TodoList.Tests/Sagas/DueReminderSagaTests.cs
-using TodoList.Api.Sagas;
 using TodoList.Domain.Events;
+using TodoList.Domain.Sagas;
 using Wolverine;
 
 namespace TodoList.Tests.Sagas;
@@ -14,12 +14,27 @@ public class DueReminderSagaTests
         var due = DateTimeOffset.UtcNow.AddDays(3);
         var evt = new TodoDueDateSetEvent(todoId, due, "user-1");
 
-        var saga = DueReminderSaga.Start(evt);
+        var (saga, _) = DueReminderSaga.Start(evt);
 
         saga.Id.Should().Be(todoId);
         saga.UserId.Should().Be("user-1");
         saga.DueDate.Should().Be(due);
         saga.ReminderFired.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Start_cascades_a_scheduled_reminder_message()
+    {
+        var todoId = Guid.NewGuid();
+        var due = DateTimeOffset.UtcNow.AddDays(3);
+        var evt = new TodoDueDateSetEvent(todoId, due, "user-1");
+
+        var (_, scheduled) = DueReminderSaga.Start(evt);
+
+        scheduled.Should().NotBeNull();
+        scheduled.Message.TodoId.Should().Be(todoId);
+        scheduled.Message.DueDate.Should().Be(due);
+        scheduled.Options.ScheduleDelay.Should().BeGreaterThan(TimeSpan.Zero);
     }
 
     [Fact]
@@ -64,14 +79,14 @@ public class DueReminderSagaTests
             UserId = "user-1",
             DueDate = DateTimeOffset.UtcNow.AddHours(12)
         };
-        // Due date already within 24h — reschedule to within 24h again
+        // Due date already within 24h — reminder fires immediately (delay clamped to zero)
         var newDue = DateTimeOffset.UtcNow.AddHours(6);
         var evt = new TodoDueDateSetEvent(todoId, newDue, "user-1");
 
-        var messages = saga.Handle(evt).ToList();
+        var scheduled = saga.Handle(evt);
 
-        messages.Should().ContainSingle()
-            .Which.Should().BeOfType<DueReminderMessage>();
+        scheduled.Should().NotBeNull();
+        scheduled.Options.ScheduleDelay.Should().Be(TimeSpan.Zero);
     }
 
     [Fact]
@@ -86,9 +101,9 @@ public class DueReminderSagaTests
         };
         var evt = new TodoDueDateSetEvent(todoId, DateTimeOffset.UtcNow.AddDays(5), "user-1");
 
-        var messages = saga.Handle(evt).ToList();
+        var scheduled = saga.Handle(evt);
 
-        messages.Should().ContainSingle()
-            .Which.Should().BeOfType<DeliveryMessage<DueReminderMessage>>();
+        scheduled.Should().NotBeNull();
+        scheduled.Options.ScheduleDelay.Should().BeGreaterThan(TimeSpan.FromDays(3));
     }
 }
