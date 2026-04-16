@@ -22,7 +22,7 @@ public static class CategoryEndpoints
                 .ToListAsync();
             return Results.Ok(categories.Select(c => new
             {
-                c.Id, c.Name, c.Color, c.Icon, c.Order, c.TodoCount
+                c.Id, c.Name, c.Color, c.Icon, c.Order, c.TodoCount, c.Version
             }));
         });
 

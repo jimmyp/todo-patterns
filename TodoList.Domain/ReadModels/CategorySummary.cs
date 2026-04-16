@@ -9,4 +9,5 @@ public record CategorySummary
     public string Icon { get; init; } = "";
     public int Order { get; init; }
     public int TodoCount { get; init; }
+    public int Version { get; init; }
 }

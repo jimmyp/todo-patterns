@@ -16,25 +16,46 @@ public class Todo
     public DateTimeOffset? DueDate { get; private set; }
     public string? Notes { get; private set; }
     public int Progress { get; private set; }
+    public int Version { get; private set; }
+    public string UserId { get; private set; } = "";
 
     public static DomainResult<(Todo todo, IReadOnlyList<IDomainEvent> events)> Create(
-        string title, DateTimeOffset now)
+        string title, DateTimeOffset now, string userId = "",
+        Guid? categoryId = null, DateTimeOffset? dueDate = null,
+        string? notes = null, int progress = 0)
     {
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(title)) errors.Add("Title cannot be empty");
         if (title?.Length > 500)             errors.Add("Title cannot exceed 500 characters");
+        if (notes?.Length > 2000)            errors.Add("Notes cannot exceed 2000 characters");
+        if (progress < 0 || progress > 100) errors.Add("Progress must be between 0 and 100");
         if (errors.Count > 0)
             return DomainResult<(Todo, IReadOnlyList<IDomainEvent>)>.Fail([..errors]);
 
         var todo = new Todo
         {
-            Id        = Guid.NewGuid(),
-            Title     = title!.Trim(),
-            CreatedAt = now
+            Id         = Guid.NewGuid(),
+            Title      = title!.Trim(),
+            CreatedAt  = now,
+            Version    = 1,
+            UserId     = userId,
+            CategoryId = categoryId,
+            DueDate    = dueDate,
+            Notes      = notes,
+            Progress   = progress
         };
 
-        return DomainResult<(Todo, IReadOnlyList<IDomainEvent>)>.Ok(
-            (todo, [new TodoCreatedEvent(todo.Id, todo.Title, now)]));
+        var events = new List<IDomainEvent> { new TodoCreatedEvent(todo.Id, todo.Title, now) };
+        if (categoryId.HasValue)
+            events.Add(new TodoCategoryAssignedEvent(todo.Id, categoryId.Value));
+        if (dueDate.HasValue)
+            events.Add(new TodoDueDateSetEvent(todo.Id, dueDate.Value, userId));
+        if (notes is not null)
+            events.Add(new TodoNotesUpdatedEvent(todo.Id, notes));
+        if (progress > 0)
+            events.Add(new TodoProgressUpdatedEvent(todo.Id, progress));
+
+        return DomainResult<(Todo, IReadOnlyList<IDomainEvent>)>.Ok((todo, events));
     }
 
     public DomainResult<IReadOnlyList<IDomainEvent>> Complete(DateTimeOffset now)
@@ -47,6 +68,7 @@ public class Todo
 
         IsCompleted = true;
         CompletedAt = now;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoCompletedEvent(Id, now)]);
     }
 
@@ -60,6 +82,7 @@ public class Todo
 
         IsCompleted = false;
         CompletedAt = null;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoUncompletedEvent(Id)]);
     }
 
@@ -70,6 +93,7 @@ public class Todo
 
         IsDeleted = true;
         DeletedAt = now;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoDeletedEvent(Id, now)]);
     }
 
@@ -83,6 +107,7 @@ public class Todo
             return DomainResult<IReadOnlyList<IDomainEvent>>.Fail([..errors]);
 
         Title = newTitle!.Trim();
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoRenamedEvent(Id, Title)]);
     }
 
@@ -92,6 +117,7 @@ public class Todo
             return DomainResult<IReadOnlyList<IDomainEvent>>.Fail("Cannot update a deleted todo");
 
         CategoryId = categoryId;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoCategoryAssignedEvent(Id, categoryId)]);
     }
 
@@ -101,6 +127,7 @@ public class Todo
             return DomainResult<IReadOnlyList<IDomainEvent>>.Fail("Cannot update a deleted todo");
 
         CategoryId = null;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoCategoryUnassignedEvent(Id)]);
     }
 
@@ -110,6 +137,7 @@ public class Todo
             return DomainResult<IReadOnlyList<IDomainEvent>>.Fail("Cannot update a deleted todo");
 
         DueDate = dueDate;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoDueDateSetEvent(Id, dueDate)]);
     }
 
@@ -119,6 +147,7 @@ public class Todo
             return DomainResult<IReadOnlyList<IDomainEvent>>.Fail("Cannot update a deleted todo");
 
         DueDate = null;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoDueDateClearedEvent(Id)]);
     }
 
@@ -131,6 +160,7 @@ public class Todo
             return DomainResult<IReadOnlyList<IDomainEvent>>.Fail([..errors]);
 
         Notes = notes;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoNotesUpdatedEvent(Id, notes)]);
     }
 
@@ -143,6 +173,7 @@ public class Todo
             return DomainResult<IReadOnlyList<IDomainEvent>>.Fail([..errors]);
 
         Progress = progress;
+        Version++;
         return DomainResult<IReadOnlyList<IDomainEvent>>.Ok([new TodoProgressUpdatedEvent(Id, progress)]);
     }
 }

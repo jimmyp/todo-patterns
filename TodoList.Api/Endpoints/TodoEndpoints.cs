@@ -27,7 +27,7 @@ public static class TodoEndpoints
             {
                 t.Id, t.Title, t.IsCompleted, t.CategoryId, t.CategoryName, t.CategoryColor,
                 t.DueDate, IsOverdue = t.DueDate.HasValue && !t.IsCompleted && t.DueDate < now,
-                t.Progress, t.CreatedAt, t.CompletedAt
+                t.Progress, t.CreatedAt, t.CompletedAt, t.Version
             }));
         });
 
@@ -46,7 +46,8 @@ public static class TodoEndpoints
             CancellationToken ct) =>
         {
             var userId = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var result = Todo.Create(request.Title, DateTimeOffset.UtcNow);
+            var result = Todo.Create(request.Title, DateTimeOffset.UtcNow, userId,
+                request.CategoryId, request.DueDate, request.Notes, request.Progress ?? 0);
             if (!result.IsSuccess)
                 return Results.ValidationProblem(
                     new Dictionary<string, string[]> { ["title"] = result.Errors });
@@ -342,7 +343,12 @@ public record TodoResponse(
 
 public record OperationAcceptedResponse(Guid OperationId, int RetryAfterMs);
 
-public record CreateTodoRequest(string Title);
+public record CreateTodoRequest(
+    string Title,
+    Guid? CategoryId = null,
+    DateTimeOffset? DueDate = null,
+    string? Notes = null,
+    int? Progress = null);
 
 file record RenameTodoRequest(string Title);
 file record AssignCategoryRequest(Guid CategoryId);

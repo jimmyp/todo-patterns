@@ -21,6 +21,7 @@ public class TodoDbContext(DbContextOptions<TodoDbContext> options) : DbContext(
             b.HasKey(t => t.Id);
             b.Property(t => t.Title).HasMaxLength(500).IsRequired();
             b.Property(t => t.Notes).HasMaxLength(2000);
+            b.Property(t => t.UserId).HasMaxLength(200);
             b.HasQueryFilter(t => !t.IsDeleted);
         });
 

@@ -19,18 +19,19 @@ public class TodoProjectionHandler(TodoDbContext db)
                     Id = e.TodoId,
                     UserId = userId,
                     Title = e.Title,
-                    CreatedAt = e.CreatedAt
+                    CreatedAt = e.CreatedAt,
+                    Version = 1
                 });
                 break;
 
             case TodoCompletedEvent e:
                 var todo = await db.TodoSummaries.FindAsync(e.TodoId);
-                if (todo is not null) { todo.IsCompleted = true; todo.CompletedAt = e.CompletedAt; }
+                if (todo is not null) { todo.IsCompleted = true; todo.CompletedAt = e.CompletedAt; todo.Version++; }
                 break;
 
             case TodoUncompletedEvent e:
                 var todo2 = await db.TodoSummaries.FindAsync(e.TodoId);
-                if (todo2 is not null) { todo2.IsCompleted = false; todo2.CompletedAt = null; }
+                if (todo2 is not null) { todo2.IsCompleted = false; todo2.CompletedAt = null; todo2.Version++; }
                 break;
 
             case TodoDeletedEvent e:
@@ -40,7 +41,7 @@ public class TodoProjectionHandler(TodoDbContext db)
 
             case TodoRenamedEvent e:
                 var todo4 = await db.TodoSummaries.FindAsync(e.TodoId);
-                if (todo4 is not null) todo4.Title = e.NewTitle;
+                if (todo4 is not null) { todo4.Title = e.NewTitle; todo4.Version++; }
                 break;
 
             case TodoCategoryAssignedEvent e:
@@ -59,6 +60,7 @@ public class TodoProjectionHandler(TodoDbContext db)
                         if (prev is not null) prev.TodoCount = Math.Max(0, prev.TodoCount - 1);
                     }
                     if (cat is not null) cat.TodoCount++;
+                    todo5.Version++;
                 }
                 break;
 
@@ -74,22 +76,23 @@ public class TodoProjectionHandler(TodoDbContext db)
                     todo6.CategoryId = null;
                     todo6.CategoryName = null;
                     todo6.CategoryColor = null;
+                    todo6.Version++;
                 }
                 break;
 
             case TodoDueDateSetEvent e:
                 var todo7 = await db.TodoSummaries.FindAsync(e.TodoId);
-                if (todo7 is not null) todo7.DueDate = e.DueDate;
+                if (todo7 is not null) { todo7.DueDate = e.DueDate; todo7.Version++; }
                 break;
 
             case TodoDueDateClearedEvent e:
                 var todo8 = await db.TodoSummaries.FindAsync(e.TodoId);
-                if (todo8 is not null) todo8.DueDate = null;
+                if (todo8 is not null) { todo8.DueDate = null; todo8.Version++; }
                 break;
 
             case TodoProgressUpdatedEvent e:
                 var todo9 = await db.TodoSummaries.FindAsync(e.TodoId);
-                if (todo9 is not null) todo9.Progress = e.Progress;
+                if (todo9 is not null) { todo9.Progress = e.Progress; todo9.Version++; }
                 break;
         }
 

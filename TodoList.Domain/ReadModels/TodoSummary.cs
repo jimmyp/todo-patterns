@@ -14,4 +14,5 @@ public record TodoSummary
     public int Progress { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? CompletedAt { get; init; }
+    public int Version { get; init; }
 }

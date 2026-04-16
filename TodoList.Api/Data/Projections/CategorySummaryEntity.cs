@@ -10,4 +10,5 @@ public class CategorySummaryEntity
     public string Icon { get; set; } = "";
     public int Order { get; set; }
     public int TodoCount { get; set; }
+    public int Version { get; set; }
 }

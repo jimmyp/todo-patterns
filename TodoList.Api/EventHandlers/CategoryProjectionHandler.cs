@@ -22,7 +22,8 @@ public class CategoryProjectionHandler(TodoDbContext db)
                     Color = e.Color,
                     Icon = e.Icon,
                     Order = e.Order,
-                    TodoCount = 0
+                    TodoCount = 0,
+                    Version = 1
                 });
                 break;
 
@@ -31,6 +32,7 @@ public class CategoryProjectionHandler(TodoDbContext db)
                 if (cat is not null)
                 {
                     cat.Name = e.NewName;
+                    cat.Version++;
                     // Update denormalized name in TodoSummaries
                     var todos = db.TodoSummaries.Where(t => t.CategoryId == e.CategoryId);
                     await todos.ForEachAsync(t => t.CategoryName = e.NewName);
@@ -42,6 +44,7 @@ public class CategoryProjectionHandler(TodoDbContext db)
                 if (cat2 is not null)
                 {
                     cat2.Color = e.NewColor;
+                    cat2.Version++;
                     var todos = db.TodoSummaries.Where(t => t.CategoryId == e.CategoryId);
                     await todos.ForEachAsync(t => t.CategoryColor = e.NewColor);
                 }
@@ -49,12 +52,12 @@ public class CategoryProjectionHandler(TodoDbContext db)
 
             case CategoryIconChangedEvent e:
                 var cat3 = await db.CategorySummaries.FindAsync(e.CategoryId);
-                if (cat3 is not null) cat3.Icon = e.NewIcon;
+                if (cat3 is not null) { cat3.Icon = e.NewIcon; cat3.Version++; }
                 break;
 
             case CategoryReorderedEvent e:
                 var cat4 = await db.CategorySummaries.FindAsync(e.CategoryId);
-                if (cat4 is not null) cat4.Order = e.NewOrder;
+                if (cat4 is not null) { cat4.Order = e.NewOrder; cat4.Version++; }
                 break;
 
             case CategoryRemovedEvent e:
