@@ -67,7 +67,7 @@
             { x => x.IsEdit, false }
         }, options);
         var result = await dialog.Result;
-        if (!result.Canceled && result.Data is CategoryDialogResult data)
+        if (result is not null && !result.Canceled && result.Data is CategoryDialogResult data)
         {
             var command = new ClientCommand
             {
@@ -103,7 +103,7 @@
             { x => x.InitialIcon, cat.Icon }
         }, options);
         var result = await dialog.Result;
-        if (!result.Canceled && result.Data is CategoryDialogResult data)
+        if (result is not null && !result.Canceled && result.Data is CategoryDialogResult data)
         {
             var command = new ClientCommand
             {

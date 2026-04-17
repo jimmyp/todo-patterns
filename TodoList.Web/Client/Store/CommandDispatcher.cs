@@ -106,19 +106,32 @@ public class CommandDispatcher
 
     internal async Task DispatchToServer(ClientCommand command, string aggregateId)
     {
-        try
+        const int maxRetries = 3;
+        int[] retryDelaysMs = [200, 400, 800];
+
+        for (var attempt = 0; attempt <= maxRetries; attempt++)
         {
-            var method = new HttpMethod(command.HttpMethod);
-            var request = new HttpRequestMessage(method, command.ApiEndpoint)
+            try
             {
-                Content = command.Payload is { } payload ? JsonContent.Create(payload) : null
-            };
-            request.Headers.Add("X-Expected-Version", command.ExpectedVersion.ToString());
+                var method = new HttpMethod(command.HttpMethod);
+                var request = new HttpRequestMessage(method, command.ApiEndpoint)
+                {
+                    Content = command.Payload is { } payload ? JsonContent.Create(payload) : null
+                };
+                request.Headers.Add("X-Expected-Version", command.ExpectedVersion.ToString());
 
-            var response = await _http.SendAsync(request);
+                var response = await _http.SendAsync(request);
 
-            switch (response.StatusCode)
-            {
+                // Retry on 5xx — transient server error
+                var statusCode = (int)response.StatusCode;
+                if (statusCode >= 500 && attempt < maxRetries)
+                {
+                    await Task.Delay(retryDelaysMs[attempt]);
+                    continue;
+                }
+
+                switch (response.StatusCode)
+                {
                 case HttpStatusCode.Accepted: // 202
                 {
                     var location = response.Headers.Location?.ToString()
@@ -196,10 +209,9 @@ public class CommandDispatcher
                 }
                 default:
                 {
-                    var statusCode = (int)response.StatusCode;
                     if (statusCode >= 500)
                     {
-                        // Transient — SyncService will retry on next connectivity event
+                        // All retries exhausted — leave in unsynced state
                         break;
                     }
                     // Other 4xx — discard speculative, show error
@@ -209,11 +221,20 @@ public class CommandDispatcher
                     break;
                 }
             }
+
+            // If we handled the response, break out of retry loop
+            break;
         }
         catch (HttpRequestException)
         {
+            if (attempt < maxRetries)
+            {
+                await Task.Delay(retryDelaysMs[attempt]);
+                continue;
+            }
             // Network error — leave in unsynced state, SyncService replays on reconnect
         }
+        } // end for
     }
 }
 

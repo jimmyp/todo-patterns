@@ -39,14 +39,16 @@
         </MudContainer>
     </MudMainContent>
 
-    @* Mobile: bottom navigation *@
-    <MudBottomNavigation SelectedIndex="_bottomNavIndex"
-                         SelectedIndexChanged="OnBottomNavChanged"
-                         Style="background:var(--bg-surface);display:none;"
-                         Class="d-flex d-md-none">
-        <MudBottomNavigationItem Label="Todos" Icon="@Icons.Material.Filled.CheckCircle" />
-        <MudBottomNavigationItem Label="Categories" Icon="@Icons.Material.Filled.Category" />
-    </MudBottomNavigation>
+    @* Mobile: bottom navigation using MudTabs *@
+    <div style="display:none;" class="d-flex d-md-none">
+        <MudTabs Position="Position.Bottom"
+                 ActivePanelIndex="_bottomNavIndex"
+                 ActivePanelIndexChanged="OnBottomNavChanged"
+                 Style="background:var(--bg-surface);width:100%;position:fixed;bottom:0;z-index:100;">
+            <MudTabPanel Text="Todos" Icon="@Icons.Material.Filled.CheckCircle" />
+            <MudTabPanel Text="Categories" Icon="@Icons.Material.Filled.Category" />
+        </MudTabs>
+    </div>
 </MudLayout>
 
 @code {

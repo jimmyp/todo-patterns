@@ -59,7 +59,7 @@
 @* Completed tasks section — collapsed by default *@
 @if (_completedTodos.Count > 0)
 {
-    <MudExpansionPanel Style="background:var(--bg-surface);border-radius:var(--radius);" Elevation="0">
+    <MudExpansionPanel Style="background:var(--bg-surface);border-radius:var(--radius);">
         <TitleContent>
             <MudText Typo="Typo.overline" Style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.65rem;letter-spacing:0.1em;">
                 COMPLETED (@_completedTodos.Count)
@@ -119,7 +119,7 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
         var dialog = await DialogService.ShowAsync<TaskDialog>("Add Task", parameters, options);
         var result = await dialog.Result;
-        if (!result.Canceled && result.Data is TaskDialogResult data)
+        if (result is not null && !result.Canceled && result.Data is TaskDialogResult data)
         {
             var newId = Guid.NewGuid().ToString();
             var command = new ClientCommand
@@ -166,7 +166,7 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
         var dialog = await DialogService.ShowAsync<TaskDialog>("Edit Task", parameters, options);
         var result = await dialog.Result;
-        if (!result.Canceled && result.Data is TaskDialogResult data)
+        if (result is not null && !result.Canceled && result.Data is TaskDialogResult data)
         {
             var command = new ClientCommand
             {
