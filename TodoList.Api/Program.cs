@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using TodoList.Api.Auth;
 using TodoList.Api.Data;
 using TodoList.Api.Endpoints;
-using TodoList.Api.EventHandlers;
 using TodoList.Api.Hubs;
 using Wolverine;
 using Wolverine.SqlServer;
@@ -78,8 +77,6 @@ builder.Services.AddAuthorizationBuilder()
 builder.Services.AddScoped<ITodoRepository, TodoRepository>();
 builder.Services.AddScoped<IOperationRepository, OperationRepository>();
 builder.Services.AddScoped<ICategoryListRepository, CategoryListRepository>();
-builder.Services.AddScoped<TodoProjectionHandler>();
-builder.Services.AddScoped<CategoryProjectionHandler>();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<TodoDbContext>(tags: ["ready"]);

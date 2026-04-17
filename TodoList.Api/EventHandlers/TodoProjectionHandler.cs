@@ -1,16 +1,24 @@
 // TodoList.Api/EventHandlers/TodoProjectionHandler.cs
 using TodoList.Api.Data;
 using TodoList.Api.Data.Projections;
+using TodoList.Api.Handlers;
 using TodoList.Domain;
 using TodoList.Domain.Events;
 using Microsoft.EntityFrameworkCore;
 
 namespace TodoList.Api.EventHandlers;
 
+/// <summary>
+/// Wolverine event handler — subscribes to UserScopedEvent (cascaded from command handlers)
+/// and updates TodoSummary projections.
+/// </summary>
 public class TodoProjectionHandler(TodoDbContext db)
 {
-    public async Task HandleAsync(string userId, IDomainEvent evt)
+    public async Task Handle(UserScopedEvent envelope)
     {
+        var userId = envelope.UserId;
+        var evt = envelope.Event;
+
         switch (evt)
         {
             case TodoCreatedEvent e:
@@ -53,7 +61,6 @@ public class TodoProjectionHandler(TodoDbContext db)
                     todo5.CategoryId = e.CategoryId;
                     todo5.CategoryName = cat?.Name;
                     todo5.CategoryColor = cat?.Color;
-                    // Update counts
                     if (prevCatId.HasValue)
                     {
                         var prev = await db.CategorySummaries.FindAsync(prevCatId.Value);
@@ -88,6 +95,10 @@ public class TodoProjectionHandler(TodoDbContext db)
             case TodoDueDateClearedEvent e:
                 var todo8 = await db.TodoSummaries.FindAsync(e.TodoId);
                 if (todo8 is not null) { todo8.DueDate = null; todo8.Version++; }
+                break;
+
+            case TodoNotesUpdatedEvent:
+                // Notes not denormalized into TodoSummary — no-op
                 break;
 
             case TodoProgressUpdatedEvent e:

@@ -11,7 +11,7 @@ public class TodoCommandHandlerTests
     [Fact]
     public void CreateTodoCommand_handler_produces_a_todo_with_correct_title()
     {
-        var cmd = new CreateTodoCommand("Buy milk", null, null, null, 0);
+        var cmd = new CreateTodoCommand("Buy milk", "user-1", Guid.NewGuid());
         cmd.Title.Should().Be("Buy milk");
     }
 
@@ -19,7 +19,7 @@ public class TodoCommandHandlerTests
     public void RenameTodoCommand_carries_todo_id_and_new_title()
     {
         var id = Guid.NewGuid();
-        var cmd = new RenameTodoCommand(id, "New title");
+        var cmd = new RenameTodoCommand(id, "New title", "user-1", Guid.NewGuid());
         cmd.TodoId.Should().Be(id);
         cmd.NewTitle.Should().Be("New title");
     }
@@ -29,7 +29,7 @@ public class TodoCommandHandlerTests
     {
         var id = Guid.NewGuid();
         var due = DateTimeOffset.UtcNow.AddDays(3);
-        var cmd = new SetDueDateCommand(id, due);
+        var cmd = new SetDueDateCommand(id, due, "user-1", Guid.NewGuid());
         cmd.TodoId.Should().Be(id);
         cmd.DueDate.Should().Be(due);
     }

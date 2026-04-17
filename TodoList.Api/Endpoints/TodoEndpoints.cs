@@ -1,10 +1,10 @@
-using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+// TodoList.Api/Endpoints/TodoEndpoints.cs
+using System.Security.Claims;
 using TodoList.Api.Data;
-using TodoList.Domain.Aggregates;
 using TodoList.Api.Operations;
-using TodoList.Api.EventHandlers;
+using TodoList.Domain.Aggregates;
+using TodoList.Domain.Commands;
+using Wolverine;
 
 namespace TodoList.Api.Endpoints;
 
@@ -16,11 +16,11 @@ public static class TodoEndpoints
 
         group.MapGet("/", async (TodoDbContext db, HttpContext ctx) =>
         {
-            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var summaries = await db.TodoSummaries
-                .Where(t => t.UserId == userId)
-                .OrderBy(t => t.CreatedAt)
-                .ToListAsync();
+            var userId = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
+            var summaries = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+                .ToListAsync(db.TodoSummaries
+                    .Where(t => t.UserId == userId)
+                    .OrderBy(t => t.CreatedAt));
 
             var now = DateTimeOffset.UtcNow;
             return Results.Ok(summaries.Select(t => new
@@ -38,295 +38,118 @@ public static class TodoEndpoints
         });
 
         group.MapPost("/", async (
-            [FromBody] CreateTodoRequest request,
-            ITodoRepository todos,
+            CreateTodoRequest request,
+            IMessageBus bus,
             IOperationRepository ops,
-            TodoProjectionHandler projHandler,
-            HttpContext httpContext,
-            CancellationToken ct) =>
+            HttpContext ctx) =>
         {
-            var userId = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var result = Todo.Create(request.Title, DateTimeOffset.UtcNow, userId,
-                request.CategoryId, request.DueDate, request.Notes, request.Progress ?? 0);
-            if (!result.IsSuccess)
-                return Results.ValidationProblem(
-                    new Dictionary<string, string[]> { ["title"] = result.Errors });
+            var userId = GetUserId(ctx);
+            var operationId = Guid.NewGuid();
+            await ops.AddAsync(new TodoOperation { Id = operationId, Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
+            await ops.SaveAsync();
 
-            var (todo, events) = result.Value!;
-            var operation = new TodoOperation
-            {
-                Id          = Guid.NewGuid(),
-                Status      = "complete",
-                ResultJson  = JsonSerializer.Serialize(new { id = todo.Id }),
-                CreatedAt   = DateTimeOffset.UtcNow,
-                CompletedAt = DateTimeOffset.UtcNow
-            };
+            await bus.PublishAsync(new CreateTodoCommand(
+                request.Title, userId, operationId,
+                request.CategoryId, request.DueDate, request.Notes, request.Progress ?? 0));
 
-            await todos.AddAsync(todo, ct);    // stages Todo
-            await ops.AddAsync(operation, ct); // stages Operation
-            await ops.SaveAsync(ct);           // flushes both (shared DbContext)
-
-            // Write projection
-            foreach (var evt in events)
-                await projHandler.HandleAsync(userId, evt);
-
-            httpContext.Response.Headers["X-Retry-After-Ms"] = "200";
+            ctx.Response.Headers["X-Retry-After-Ms"] = "200";
             return Results.Accepted(
-                $"/todos/operations/{operation.Id}",
-                new OperationAcceptedResponse(operation.Id, RetryAfterMs: 200));
+                $"/todos/operations/{operationId}",
+                new OperationAcceptedResponse(operationId, RetryAfterMs: 200));
         });
 
-        group.MapPost("/{id:guid}/complete", async (
-            Guid id,
-            ITodoRepository todos,
-            IOperationRepository ops,
-            TodoProjectionHandler projHandler,
-            HttpContext httpContext,
-            CancellationToken ct) =>
+        group.MapPost("/{id:guid}/complete", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await todos.GetByIdAsync(id, ct);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.Complete(DateTimeOffset.UtcNow);
-            if (!result.IsSuccess)
-                return Results.ValidationProblem(
-                    new Dictionary<string, string[]> { [""] = result.Errors });
-
-            var operation = new TodoOperation
-            {
-                Id          = Guid.NewGuid(),
-                Status      = "complete",
-                CreatedAt   = DateTimeOffset.UtcNow,
-                CompletedAt = DateTimeOffset.UtcNow
-            };
-
-            await ops.AddAsync(operation, ct);
-            await ops.SaveAsync(ct); // flushes all (shared DbContext — saves todo state + operation)
-
-            foreach (var evt in result.Value!)
-                await projHandler.HandleAsync(userId, evt);
-
-            httpContext.Response.Headers["X-Retry-After-Ms"] = "200";
-            return Results.Accepted(
-                $"/todos/operations/{operation.Id}",
-                new OperationAcceptedResponse(operation.Id, RetryAfterMs: 200));
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new CompleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        group.MapPost("/{id:guid}/uncomplete", async (
-            Guid id,
-            ITodoRepository todos,
-            IOperationRepository ops,
-            TodoProjectionHandler projHandler,
-            HttpContext httpContext,
-            CancellationToken ct) =>
+        group.MapPost("/{id:guid}/uncomplete", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await todos.GetByIdAsync(id, ct);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.Uncomplete();
-            if (!result.IsSuccess)
-                return Results.ValidationProblem(
-                    new Dictionary<string, string[]> { [""] = result.Errors });
-
-            var operation = new TodoOperation
-            {
-                Id          = Guid.NewGuid(),
-                Status      = "complete",
-                CreatedAt   = DateTimeOffset.UtcNow,
-                CompletedAt = DateTimeOffset.UtcNow
-            };
-
-            await ops.AddAsync(operation, ct);
-            await ops.SaveAsync(ct); // flushes all (shared DbContext — saves todo state + operation)
-
-            foreach (var evt in result.Value!)
-                await projHandler.HandleAsync(userId, evt);
-
-            httpContext.Response.Headers["X-Retry-After-Ms"] = "200";
-            return Results.Accepted(
-                $"/todos/operations/{operation.Id}",
-                new OperationAcceptedResponse(operation.Id, RetryAfterMs: 200));
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new UncompleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        group.MapDelete("/{id:guid}", async (
-            Guid id,
-            ITodoRepository todos,
-            IOperationRepository ops,
-            TodoProjectionHandler projHandler,
-            HttpContext httpContext,
-            CancellationToken ct) =>
+        group.MapDelete("/{id:guid}", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await todos.GetByIdAsync(id, ct);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.Delete(DateTimeOffset.UtcNow);
-            if (!result.IsSuccess)
-                return Results.ValidationProblem(
-                    new Dictionary<string, string[]> { [""] = result.Errors });
-
-            var operation = new TodoOperation
-            {
-                Id          = Guid.NewGuid(),
-                Status      = "complete",
-                CreatedAt   = DateTimeOffset.UtcNow,
-                CompletedAt = DateTimeOffset.UtcNow
-            };
-
-            await ops.AddAsync(operation, ct);
-            await ops.SaveAsync(ct); // flushes all (shared DbContext — saves todo state + operation)
-
-            foreach (var evt in result.Value!)
-                await projHandler.HandleAsync(userId, evt);
-
-            httpContext.Response.Headers["X-Retry-After-Ms"] = "200";
-            return Results.Accepted(
-                $"/todos/operations/{operation.Id}",
-                new OperationAcceptedResponse(operation.Id, RetryAfterMs: 200));
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new DeleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        // Extended endpoints
-        group.MapPost("/{id:guid}/rename", async (
-            Guid id, RenameTodoRequest req,
-            ITodoRepository repo, TodoProjectionHandler projHandler,
-            IOperationRepository opRepo, HttpContext ctx) =>
+        group.MapPost("/{id:guid}/rename", async (Guid id, RenameTodoRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await repo.GetByIdAsync(id);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.Rename(req.Title);
-            if (!result.IsSuccess) return Results.UnprocessableEntity(new { errors = result.Errors });
-
-            await repo.SaveAsync();
-            foreach (var evt in result.Value!) await projHandler.HandleAsync(userId, evt);
-
-            var op = TodoOperation.CreateCompleted(Guid.NewGuid(), id.ToString());
-            await opRepo.AddAsync(op); await opRepo.SaveAsync();
-            return Results.Accepted($"/todos/operations/{op.Id}", new { operationId = op.Id });
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new RenameTodoCommand(id, req.Title, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        group.MapPost("/{id:guid}/assign-category", async (
-            Guid id, AssignCategoryRequest req,
-            ITodoRepository repo, TodoProjectionHandler projHandler,
-            IOperationRepository opRepo, HttpContext ctx) =>
+        group.MapPost("/{id:guid}/assign-category", async (Guid id, AssignCategoryRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await repo.GetByIdAsync(id);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.AssignCategory(req.CategoryId);
-            if (!result.IsSuccess) return Results.UnprocessableEntity(new { errors = result.Errors });
-
-            await repo.SaveAsync();
-            foreach (var evt in result.Value!) await projHandler.HandleAsync(userId, evt);
-
-            var op = TodoOperation.CreateCompleted(Guid.NewGuid(), id.ToString());
-            await opRepo.AddAsync(op); await opRepo.SaveAsync();
-            return Results.Accepted($"/todos/operations/{op.Id}", new { operationId = op.Id });
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new AssignCategoryCommand(id, req.CategoryId, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        group.MapPost("/{id:guid}/unassign-category", async (
-            Guid id,
-            ITodoRepository repo, TodoProjectionHandler projHandler,
-            IOperationRepository opRepo, HttpContext ctx) =>
+        group.MapPost("/{id:guid}/unassign-category", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await repo.GetByIdAsync(id);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.UnassignCategory();
-            if (!result.IsSuccess) return Results.UnprocessableEntity(new { errors = result.Errors });
-
-            await repo.SaveAsync();
-            foreach (var evt in result.Value!) await projHandler.HandleAsync(userId, evt);
-
-            var op = TodoOperation.CreateCompleted(Guid.NewGuid(), id.ToString());
-            await opRepo.AddAsync(op); await opRepo.SaveAsync();
-            return Results.Accepted($"/todos/operations/{op.Id}", new { operationId = op.Id });
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new UnassignCategoryCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        group.MapPost("/{id:guid}/set-due-date", async (
-            Guid id, SetDueDateRequest req,
-            ITodoRepository repo, TodoProjectionHandler projHandler,
-            IOperationRepository opRepo, HttpContext ctx) =>
+        group.MapPost("/{id:guid}/set-due-date", async (Guid id, SetDueDateRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await repo.GetByIdAsync(id);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.SetDueDate(req.DueDate);
-            if (!result.IsSuccess) return Results.UnprocessableEntity(new { errors = result.Errors });
-
-            await repo.SaveAsync();
-            foreach (var evt in result.Value!) await projHandler.HandleAsync(userId, evt);
-
-            var op = TodoOperation.CreateCompleted(Guid.NewGuid(), id.ToString());
-            await opRepo.AddAsync(op); await opRepo.SaveAsync();
-            return Results.Accepted($"/todos/operations/{op.Id}", new { operationId = op.Id });
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new SetDueDateCommand(id, req.DueDate, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        group.MapPost("/{id:guid}/clear-due-date", async (
-            Guid id,
-            ITodoRepository repo, TodoProjectionHandler projHandler,
-            IOperationRepository opRepo, HttpContext ctx) =>
+        group.MapPost("/{id:guid}/clear-due-date", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await repo.GetByIdAsync(id);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.ClearDueDate();
-            if (!result.IsSuccess) return Results.UnprocessableEntity(new { errors = result.Errors });
-
-            await repo.SaveAsync();
-            foreach (var evt in result.Value!) await projHandler.HandleAsync(userId, evt);
-
-            var op = TodoOperation.CreateCompleted(Guid.NewGuid(), id.ToString());
-            await opRepo.AddAsync(op); await opRepo.SaveAsync();
-            return Results.Accepted($"/todos/operations/{op.Id}", new { operationId = op.Id });
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new ClearDueDateCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        group.MapPost("/{id:guid}/update-notes", async (
-            Guid id, UpdateNotesRequest req,
-            ITodoRepository repo, TodoProjectionHandler projHandler,
-            IOperationRepository opRepo, HttpContext ctx) =>
+        group.MapPost("/{id:guid}/update-notes", async (Guid id, UpdateNotesRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await repo.GetByIdAsync(id);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.UpdateNotes(req.Notes);
-            if (!result.IsSuccess) return Results.UnprocessableEntity(new { errors = result.Errors });
-
-            await repo.SaveAsync();
-            foreach (var evt in result.Value!) await projHandler.HandleAsync(userId, evt);
-
-            var op = TodoOperation.CreateCompleted(Guid.NewGuid(), id.ToString());
-            await opRepo.AddAsync(op); await opRepo.SaveAsync();
-            return Results.Accepted($"/todos/operations/{op.Id}", new { operationId = op.Id });
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new UpdateNotesCommand(id, req.Notes, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
 
-        group.MapPost("/{id:guid}/update-progress", async (
-            Guid id, UpdateProgressRequest req,
-            ITodoRepository repo, TodoProjectionHandler projHandler,
-            IOperationRepository opRepo, HttpContext ctx) =>
+        group.MapPost("/{id:guid}/update-progress", async (Guid id, UpdateProgressRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
-            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
-            var todo = await repo.GetByIdAsync(id);
-            if (todo is null) return Results.NotFound();
-
-            var result = todo.UpdateProgress(req.Progress);
-            if (!result.IsSuccess) return Results.UnprocessableEntity(new { errors = result.Errors });
-
-            await repo.SaveAsync();
-            foreach (var evt in result.Value!) await projHandler.HandleAsync(userId, evt);
-
-            var op = TodoOperation.CreateCompleted(Guid.NewGuid(), id.ToString());
-            await opRepo.AddAsync(op); await opRepo.SaveAsync();
-            return Results.Accepted($"/todos/operations/{op.Id}", new { operationId = op.Id });
+            var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
+            await bus.PublishAsync(new UpdateProgressCommand(id, req.Progress, GetUserId(ctx), operationId, expectedVersion));
+            return Accepted(ctx, operationId);
         });
+    }
+
+    private static string GetUserId(HttpContext ctx) =>
+        ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
+
+    private static int GetExpectedVersion(HttpContext ctx) =>
+        int.TryParse(ctx.Request.Headers["X-Expected-Version"].FirstOrDefault(), out var v) ? v : 0;
+
+    private static async Task<(Guid operationId, int expectedVersion)> CreateOperation(IOperationRepository ops, HttpContext ctx)
+    {
+        var operationId = Guid.NewGuid();
+        var expectedVersion = GetExpectedVersion(ctx);
+        await ops.AddAsync(new TodoOperation { Id = operationId, Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
+        await ops.SaveAsync();
+        return (operationId, expectedVersion);
+    }
+
+    private static IResult Accepted(HttpContext ctx, Guid operationId)
+    {
+        ctx.Response.Headers["X-Retry-After-Ms"] = "200";
+        return Results.Accepted(
+            $"/todos/operations/{operationId}",
+            new OperationAcceptedResponse(operationId, RetryAfterMs: 200));
     }
 }
 
