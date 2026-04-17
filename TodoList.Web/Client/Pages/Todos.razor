@@ -170,7 +170,7 @@
             var command = new ClientCommand
             {
                 AggregateId = todo.Id.ToString(),
-                ExpectedVersion = 0,
+                ExpectedVersion = todo.Version,
                 Type = nameof(TodoList.Domain.Commands.RenameTodoCommand),
                 Payload = JsonSerializer.SerializeToElement(new { newTitle = data.Title }),
                 ApiEndpoint = $"/todos/{todo.Id}/rename",
@@ -179,7 +179,7 @@
             var speculativeEvent = new ClientEvent
             {
                 AggregateId = todo.Id.ToString(),
-                AggregateVersion = 1,
+                AggregateVersion = todo.Version + 1,
                 Type = "TodoRenamed",
                 Payload = JsonSerializer.SerializeToElement(new { newTitle = data.Title }),
                 Timestamp = DateTimeOffset.UtcNow,
@@ -195,7 +195,7 @@
         var command = new ClientCommand
         {
             AggregateId = todo.Id.ToString(),
-            ExpectedVersion = 0,
+            ExpectedVersion = todo.Version,
             Type = completed
                 ? nameof(TodoList.Domain.Commands.CompleteTodoCommand)
                 : nameof(TodoList.Domain.Commands.UncompleteTodoCommand),
@@ -206,7 +206,7 @@
         var speculativeEvent = new ClientEvent
         {
             AggregateId = todo.Id.ToString(),
-            AggregateVersion = 1,
+            AggregateVersion = todo.Version + 1,
             Type = completed ? "TodoCompleted" : "TodoUncompleted",
             Payload = completed
                 ? JsonSerializer.SerializeToElement(new { completedAt = DateTimeOffset.UtcNow })
@@ -223,7 +223,7 @@
         var command = new ClientCommand
         {
             AggregateId = todo.Id.ToString(),
-            ExpectedVersion = 0,
+            ExpectedVersion = todo.Version,
             Type = nameof(TodoList.Domain.Commands.DeleteTodoCommand),
             Payload = null,
             ApiEndpoint = $"/todos/{todo.Id}",
@@ -233,7 +233,7 @@
         var speculativeEvent = new ClientEvent
         {
             AggregateId = todo.Id.ToString(),
-            AggregateVersion = 1,
+            AggregateVersion = todo.Version + 1,
             Type = "TodoDeleted",
             Payload = null,
             Timestamp = DateTimeOffset.UtcNow,

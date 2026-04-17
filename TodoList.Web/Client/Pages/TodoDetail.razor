@@ -136,7 +136,7 @@ else
         var command = new ClientCommand
         {
             AggregateId = _todo.Id.ToString(),
-            ExpectedVersion = 0,
+            ExpectedVersion = _todo.Version,
             Type = nameof(TodoList.Domain.Commands.RenameTodoCommand),
             Payload = JsonSerializer.SerializeToElement(new { newTitle = _title }),
             ApiEndpoint = $"/todos/{_todo.Id}/rename",
@@ -145,7 +145,7 @@ else
         var speculativeEvent = new ClientEvent
         {
             AggregateId = _todo.Id.ToString(),
-            AggregateVersion = 1,
+            AggregateVersion = _todo.Version + 1,
             Type = "TodoRenamed",
             Payload = JsonSerializer.SerializeToElement(new { newTitle = _title }),
             Timestamp = DateTimeOffset.UtcNow,
@@ -165,17 +165,16 @@ else
             var command = new ClientCommand
             {
                 AggregateId = _todo.Id.ToString(),
-                ExpectedVersion = 0,
+                ExpectedVersion = _todo.Version,
                 Type = nameof(TodoList.Domain.Commands.UnassignCategoryCommand),
                 Payload = null,
-                ApiEndpoint = $"/todos/{_todo.Id}/category",
-                HttpMethod = "DELETE",
+                ApiEndpoint = $"/todos/{_todo.Id}/unassign-category",
                 Timestamp = DateTimeOffset.UtcNow
             };
             var speculativeEvent = new ClientEvent
             {
                 AggregateId = _todo.Id.ToString(),
-                AggregateVersion = 1,
+                AggregateVersion = _todo.Version + 1,
                 Type = "TodoCategoryUnassigned",
                 Payload = null,
                 Timestamp = DateTimeOffset.UtcNow,
@@ -189,16 +188,16 @@ else
             var command = new ClientCommand
             {
                 AggregateId = _todo.Id.ToString(),
-                ExpectedVersion = 0,
+                ExpectedVersion = _todo.Version,
                 Type = nameof(TodoList.Domain.Commands.AssignCategoryCommand),
                 Payload = JsonSerializer.SerializeToElement(new { categoryId = value }),
-                ApiEndpoint = $"/todos/{_todo.Id}/category",
+                ApiEndpoint = $"/todos/{_todo.Id}/assign-category",
                 Timestamp = DateTimeOffset.UtcNow
             };
             var speculativeEvent = new ClientEvent
             {
                 AggregateId = _todo.Id.ToString(),
-                AggregateVersion = 1,
+                AggregateVersion = _todo.Version + 1,
                 Type = "TodoCategoryAssigned",
                 Payload = JsonSerializer.SerializeToElement(new { categoryId = value }),
                 Timestamp = DateTimeOffset.UtcNow,
@@ -219,17 +218,16 @@ else
             var command = new ClientCommand
             {
                 AggregateId = _todo.Id.ToString(),
-                ExpectedVersion = 0,
+                ExpectedVersion = _todo.Version,
                 Type = nameof(TodoList.Domain.Commands.ClearDueDateCommand),
                 Payload = null,
-                ApiEndpoint = $"/todos/{_todo.Id}/due-date",
-                HttpMethod = "DELETE",
+                ApiEndpoint = $"/todos/{_todo.Id}/clear-due-date",
                 Timestamp = DateTimeOffset.UtcNow
             };
             var speculativeEvent = new ClientEvent
             {
                 AggregateId = _todo.Id.ToString(),
-                AggregateVersion = 1,
+                AggregateVersion = _todo.Version + 1,
                 Type = "TodoDueDateCleared",
                 Payload = null,
                 Timestamp = DateTimeOffset.UtcNow,
@@ -244,16 +242,16 @@ else
             var command = new ClientCommand
             {
                 AggregateId = _todo.Id.ToString(),
-                ExpectedVersion = 0,
+                ExpectedVersion = _todo.Version,
                 Type = nameof(TodoList.Domain.Commands.SetDueDateCommand),
                 Payload = JsonSerializer.SerializeToElement(new { dueDate }),
-                ApiEndpoint = $"/todos/{_todo.Id}/due-date",
+                ApiEndpoint = $"/todos/{_todo.Id}/set-due-date",
                 Timestamp = DateTimeOffset.UtcNow
             };
             var speculativeEvent = new ClientEvent
             {
                 AggregateId = _todo.Id.ToString(),
-                AggregateVersion = 1,
+                AggregateVersion = _todo.Version + 1,
                 Type = "TodoDueDateSet",
                 Payload = JsonSerializer.SerializeToElement(new { dueDate }),
                 Timestamp = DateTimeOffset.UtcNow,
@@ -270,16 +268,16 @@ else
         var command = new ClientCommand
         {
             AggregateId = _todo.Id.ToString(),
-            ExpectedVersion = 0,
+            ExpectedVersion = _todo.Version,
             Type = nameof(TodoList.Domain.Commands.UpdateNotesCommand),
             Payload = JsonSerializer.SerializeToElement(new { notes = _notes }),
-            ApiEndpoint = $"/todos/{_todo.Id}/notes",
+            ApiEndpoint = $"/todos/{_todo.Id}/update-notes",
             Timestamp = DateTimeOffset.UtcNow
         };
         var speculativeEvent = new ClientEvent
         {
             AggregateId = _todo.Id.ToString(),
-            AggregateVersion = 1,
+            AggregateVersion = _todo.Version + 1,
             Type = "TodoNotesUpdated",
             Payload = JsonSerializer.SerializeToElement(new { notes = _notes }),
             Timestamp = DateTimeOffset.UtcNow,
@@ -295,16 +293,16 @@ else
         var command = new ClientCommand
         {
             AggregateId = _todo.Id.ToString(),
-            ExpectedVersion = 0,
+            ExpectedVersion = _todo.Version,
             Type = nameof(TodoList.Domain.Commands.UpdateProgressCommand),
             Payload = JsonSerializer.SerializeToElement(new { progress = value }),
-            ApiEndpoint = $"/todos/{_todo.Id}/progress",
+            ApiEndpoint = $"/todos/{_todo.Id}/update-progress",
             Timestamp = DateTimeOffset.UtcNow
         };
         var speculativeEvent = new ClientEvent
         {
             AggregateId = _todo.Id.ToString(),
-            AggregateVersion = 1,
+            AggregateVersion = _todo.Version + 1,
             Type = "TodoProgressUpdated",
             Payload = JsonSerializer.SerializeToElement(new { progress = value }),
             Timestamp = DateTimeOffset.UtcNow,
@@ -320,7 +318,7 @@ else
         var command = new ClientCommand
         {
             AggregateId = _todo.Id.ToString(),
-            ExpectedVersion = 0,
+            ExpectedVersion = _todo.Version,
             Type = nameof(TodoList.Domain.Commands.DeleteTodoCommand),
             Payload = null,
             ApiEndpoint = $"/todos/{_todo.Id}",
@@ -330,7 +328,7 @@ else
         var speculativeEvent = new ClientEvent
         {
             AggregateId = _todo.Id.ToString(),
-            AggregateVersion = 1,
+            AggregateVersion = _todo.Version + 1,
             Type = "TodoDeleted",
             Payload = null,
             Timestamp = DateTimeOffset.UtcNow,
