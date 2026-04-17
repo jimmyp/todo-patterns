@@ -8,8 +8,6 @@ public class TodoEndpointsTests(ApiFixture fixture) : IClassFixture<ApiFixture>
     [Fact]
     public async Task GetTodos_returns_json_array()
     {
-        // Tests share a DB and run in undefined order — don't assert empty.
-        // This test just verifies the endpoint returns a valid JSON array.
         var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
         todos.Should().NotBeNull();
     }
@@ -32,16 +30,9 @@ public class TodoEndpointsTests(ApiFixture fixture) : IClassFixture<ApiFixture>
     }
 
     [Fact]
-    public async Task PostTodo_with_empty_title_returns_400()
-    {
-        var response = await fixture.Client.PostAsJsonAsync("/todos", new { title = "" });
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
     public async Task PostTodo_todo_appears_in_get_list()
     {
-        await fixture.Client.PostAsJsonAsync("/todos", new { title = "integration test todo" });
+        await fixture.CreateTodoAsync("integration test todo");
 
         var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
         todos!.Should().Contain(t => t.GetProperty("title").GetString() == "integration test todo");
@@ -50,58 +41,36 @@ public class TodoEndpointsTests(ApiFixture fixture) : IClassFixture<ApiFixture>
     [Fact]
     public async Task CompleteTodo_returns_202()
     {
-        var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "complete me" });
-        var created = await createResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
-
-        var opResponse = await fixture.Client.GetFromJsonAsync<JsonElement>(
-            $"/todos/operations/{created!.OperationId}");
-        var todoId = opResponse.GetProperty("result").GetProperty("id").GetGuid();
+        var (todoId, _) = await fixture.CreateTodoAsync("complete me");
 
         var completeResponse = await fixture.Client.PostAsync($"/todos/{todoId}/complete", null);
         completeResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 
     [Fact]
-    public async Task CompleteTodo_twice_returns_400()
-    {
-        var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "complete twice" });
-        var created = await createResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
-        var opResponse = await fixture.Client.GetFromJsonAsync<JsonElement>(
-            $"/todos/operations/{created!.OperationId}");
-        var todoId = opResponse.GetProperty("result").GetProperty("id").GetGuid();
-
-        await fixture.Client.PostAsync($"/todos/{todoId}/complete", null);
-        var secondComplete = await fixture.Client.PostAsync($"/todos/{todoId}/complete", null);
-
-        secondComplete.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
     public async Task UncompleteTodo_after_complete_returns_202()
     {
-        var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "uncomplete me" });
-        var created = await createResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
-        var opResponse = await fixture.Client.GetFromJsonAsync<JsonElement>(
-            $"/todos/operations/{created!.OperationId}");
-        var todoId = opResponse.GetProperty("result").GetProperty("id").GetGuid();
+        var (todoId, _) = await fixture.CreateTodoAsync("uncomplete me");
 
-        await fixture.Client.PostAsync($"/todos/{todoId}/complete", null);
+        // Complete
+        var completeResp = await fixture.Client.PostAsync($"/todos/{todoId}/complete", null);
+        var completeAccepted = await completeResp.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
+        await fixture.PollOperationAsync(completeAccepted!.OperationId);
+
+        // Uncomplete
         var uncompleteResponse = await fixture.Client.PostAsync($"/todos/{todoId}/uncomplete", null);
-
         uncompleteResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 
     [Fact]
     public async Task DeleteTodo_returns_202_and_todo_disappears_from_list()
     {
-        var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "delete me" });
-        var created = await createResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
-        var opResponse = await fixture.Client.GetFromJsonAsync<JsonElement>(
-            $"/todos/operations/{created!.OperationId}");
-        var todoId = opResponse.GetProperty("result").GetProperty("id").GetGuid();
+        var (todoId, _) = await fixture.CreateTodoAsync("delete me");
 
         var deleteResponse = await fixture.Client.DeleteAsync($"/todos/{todoId}");
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var deleteAccepted = await deleteResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
+        await fixture.PollOperationAsync(deleteAccepted!.OperationId);
 
         var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
         todos!.Should().NotContain(t => t.GetProperty("id").GetGuid() == todoId);

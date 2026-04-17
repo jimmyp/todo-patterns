@@ -9,9 +9,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Net.Http.Json;
+using System.Text.Json;
 using Testcontainers.MsSql;
 using TodoList.Api.Auth;
 using TodoList.Api.Data;
+using TodoList.Api.Endpoints;
 
 namespace TodoList.IntegrationTests.Fixtures;
 
@@ -121,6 +124,36 @@ public class ApiFixture : IAsyncLifetime
         await identityDb.Database.MigrateAsync();
 
         Client = _factory.CreateClient();
+    }
+
+    /// <summary>
+    /// Polls an operation until it reaches a terminal state (complete/failed).
+    /// Wolverine handlers run async — the operation starts as "processing".
+    /// </summary>
+    public async Task<JsonElement> PollOperationAsync(Guid operationId, int maxAttempts = 20, int delayMs = 100)
+    {
+        for (var i = 0; i < maxAttempts; i++)
+        {
+            var op = await Client.GetFromJsonAsync<JsonElement>($"/todos/operations/{operationId}");
+            var status = op.GetProperty("status").GetString();
+            if (status is "complete" or "failed")
+                return op;
+            await Task.Delay(delayMs);
+        }
+        throw new TimeoutException($"Operation {operationId} did not complete within {maxAttempts * delayMs}ms");
+    }
+
+    /// <summary>
+    /// Creates a todo and waits for the operation to complete. Returns the operation result.
+    /// </summary>
+    public async Task<(Guid TodoId, Guid OperationId)> CreateTodoAsync(string title)
+    {
+        var response = await Client.PostAsJsonAsync("/todos", new { title });
+        response.EnsureSuccessStatusCode();
+        var accepted = await response.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
+        var op = await PollOperationAsync(accepted!.OperationId);
+        var todoId = op.GetProperty("result").GetProperty("id").GetGuid();
+        return (todoId, accepted.OperationId);
     }
 
     public async Task DisposeAsync()

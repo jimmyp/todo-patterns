@@ -11,8 +11,7 @@ public class OperationEndpointsTests(ApiFixture fixture) : IClassFixture<ApiFixt
         var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "op test" });
         var created = await createResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
 
-        var opResponse = await fixture.Client.GetFromJsonAsync<JsonElement>(
-            $"/todos/operations/{created!.OperationId}");
+        var opResponse = await fixture.PollOperationAsync(created!.OperationId);
 
         opResponse.GetProperty("status").GetString().Should().Be("complete");
         opResponse.GetProperty("result").GetProperty("id").GetGuid().Should().NotBeEmpty();

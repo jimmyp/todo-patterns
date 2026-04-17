@@ -1,6 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
-using FluentAssertions;
 
 namespace TodoList.IntegrationTests.Todos;
 
@@ -9,14 +7,7 @@ public class TodoExtendedEndpointTests(ApiFixture fixture) : IClassFixture<ApiFi
     [Fact]
     public async Task PostTodo_creates_summary_readable_via_get()
     {
-        var response = await fixture.Client.PostAsJsonAsync("/todos",
-            new { title = "Test task" });
-        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
-
-        // Poll operation
-        var location = response.Headers.Location!.ToString();
-        var opResponse = await fixture.Client.GetAsync(location);
-        opResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        await fixture.CreateTodoAsync("Test task");
 
         var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
         todos.Should().Contain(t => t.GetProperty("title").GetString() == "Test task");
@@ -25,27 +16,29 @@ public class TodoExtendedEndpointTests(ApiFixture fixture) : IClassFixture<ApiFi
     [Fact]
     public async Task RenameTodo_updates_title()
     {
-        var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "Original" });
-        var opId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("operationId").GetString();
-        await fixture.Client.GetAsync($"/todos/operations/{opId}");
+        var (todoId, _) = await fixture.CreateTodoAsync("Original");
+
+        var renameResponse = await fixture.Client.PostAsJsonAsync($"/todos/{todoId}/rename", new { title = "Renamed" });
+        renameResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var renameAccepted = await renameResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
+        await fixture.PollOperationAsync(renameAccepted!.OperationId);
 
         var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
-        var id = todos![0].GetProperty("id").GetString();
-
-        var renameResponse = await fixture.Client.PostAsJsonAsync($"/todos/{id}/rename", new { title = "Renamed" });
-        renameResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        todos!.Should().Contain(t => t.GetProperty("id").GetGuid() == todoId
+                                   && t.GetProperty("title").GetString() == "Renamed");
     }
 
     [Fact]
-    public async Task UpdateProgress_returns_422_for_out_of_range()
+    public async Task UpdateProgress_with_invalid_value_fails_operation()
     {
-        var createResponse = await fixture.Client.PostAsJsonAsync("/todos", new { title = "Task" });
-        var opId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("operationId").GetString();
-        await fixture.Client.GetAsync($"/todos/operations/{opId}");
-        var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
-        var id = todos![0].GetProperty("id").GetString();
+        var (todoId, _) = await fixture.CreateTodoAsync("Task");
 
-        var response = await fixture.Client.PostAsJsonAsync($"/todos/{id}/update-progress", new { progress = 150 });
-        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        // Fire-and-forget: endpoint returns 202, but operation will fail
+        var response = await fixture.Client.PostAsJsonAsync($"/todos/{todoId}/update-progress", new { progress = 150 });
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var accepted = await response.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
+        var op = await fixture.PollOperationAsync(accepted!.OperationId);
+
+        op.GetProperty("status").GetString().Should().Be("failed");
     }
 }
