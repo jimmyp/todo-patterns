@@ -8,6 +8,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject CommandDispatcher Dispatcher
+@inject IClientStore ClientStore
 @implements IDisposable
 
 <PageTitle>Todo List</PageTitle>
@@ -45,8 +46,8 @@
             @foreach (var todo in _activeTodos)
             {
                 <TaskRow Todo="@todo"
-                         IsUnsynced="false"
-                         IsConflicted="false"
+                         IsUnsynced="@ClientStore.HasUnsyncedCommand(todo.Id.ToString())"
+                         IsConflicted="@ClientStore.HasConflictedEvents(todo.Id.ToString())"
                          OnCompletedChanged="@((completed) => HandleComplete(todo, completed))"
                          OnDelete="@(() => HandleDelete(todo))"
                          OnEdit="@(() => HandleEdit(todo))" />

@@ -125,6 +125,12 @@ public class ClientStore : IClientStore, IAsyncDisposable
         }
     }
 
+    public bool HasUnsyncedCommand(string aggregateId) =>
+        _commands.Any(c => c.AggregateId == aggregateId && !c.Synced);
+
+    public bool HasConflictedEvents(string aggregateId) =>
+        _events.Any(e => e.AggregateId == aggregateId && e.State == EventState.Conflicted);
+
     public async Task InitializeAsync()
     {
         await EnsureLoaded();

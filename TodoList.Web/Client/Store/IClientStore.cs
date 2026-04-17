@@ -16,6 +16,10 @@ public interface IClientStore
     void EnqueueCommand(ClientCommand command);
     void MarkSynced(string commandId);
 
+    // Query helpers for UI state
+    bool HasUnsyncedCommand(string aggregateId);
+    bool HasConflictedEvents(string aggregateId);
+
     // Change notifications
     event Action<string> OnAggregateChanged; // fires with aggregateId after every mutation
 }
