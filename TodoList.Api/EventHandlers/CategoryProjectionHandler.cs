@@ -1,6 +1,8 @@
 // TodoList.Api/EventHandlers/CategoryProjectionHandler.cs
+using Microsoft.AspNetCore.SignalR;
 using TodoList.Api.Data;
 using TodoList.Api.Data.Projections;
+using TodoList.Api.Hubs;
 using TodoList.Domain;
 using TodoList.Domain.Events;
 using Microsoft.EntityFrameworkCore;
@@ -9,10 +11,11 @@ namespace TodoList.Api.EventHandlers;
 
 /// <summary>
 /// Wolverine event handler — subscribes to category domain events (cascaded from command handlers)
-/// and updates CategorySummary projections.
+/// and updates CategorySummary projections. After persistence, pushes the event to the
+/// originating user's SignalR group so the client can replace its speculative event.
 /// Category events already carry UserId so they don't need a UserScopedEvent wrapper.
 /// </summary>
-public class CategoryProjectionHandler(TodoDbContext db)
+public class CategoryProjectionHandler(TodoDbContext db, IHubContext<EventHub, IEventHubClient> hub)
 {
     public async Task Handle(CategoryAddedEvent e)
     {
@@ -28,6 +31,7 @@ public class CategoryProjectionHandler(TodoDbContext db)
             Version = 1
         });
         await db.SaveChangesAsync();
+        await PushAsync(e.UserId, e);
     }
 
     public async Task Handle(CategoryRenamedEvent e)
@@ -41,6 +45,7 @@ public class CategoryProjectionHandler(TodoDbContext db)
             await todos.ForEachAsync(t => t.CategoryName = e.NewName);
         }
         await db.SaveChangesAsync();
+        await PushAsync(e.UserId, e);
     }
 
     public async Task Handle(CategoryColorChangedEvent e)
@@ -54,6 +59,7 @@ public class CategoryProjectionHandler(TodoDbContext db)
             await todos.ForEachAsync(t => t.CategoryColor = e.NewColor);
         }
         await db.SaveChangesAsync();
+        await PushAsync(e.UserId, e);
     }
 
     public async Task Handle(CategoryIconChangedEvent e)
@@ -61,6 +67,7 @@ public class CategoryProjectionHandler(TodoDbContext db)
         var cat = await db.CategorySummaries.FindAsync(e.CategoryId);
         if (cat is not null) { cat.Icon = e.NewIcon; cat.Version++; }
         await db.SaveChangesAsync();
+        await PushAsync(e.UserId, e);
     }
 
     public async Task Handle(CategoryReorderedEvent e)
@@ -68,6 +75,7 @@ public class CategoryProjectionHandler(TodoDbContext db)
         var cat = await db.CategorySummaries.FindAsync(e.CategoryId);
         if (cat is not null) { cat.Order = e.NewOrder; cat.Version++; }
         await db.SaveChangesAsync();
+        await PushAsync(e.UserId, e);
     }
 
     public async Task Handle(CategoryRemovedEvent e)
@@ -77,5 +85,13 @@ public class CategoryProjectionHandler(TodoDbContext db)
         var todos = db.TodoSummaries.Where(t => t.CategoryId == e.CategoryId);
         await todos.ForEachAsync(t => { t.CategoryId = null; t.CategoryName = null; t.CategoryColor = null; });
         await db.SaveChangesAsync();
+        await PushAsync(e.UserId, e);
     }
+
+    private Task PushAsync(string userId, object evt) =>
+        hub.Clients.Group($"user:{userId}").ReceiveEvent(new
+        {
+            type = evt.GetType().Name.Replace("Event", ""),
+            payload = evt
+        });
 }

@@ -59,6 +59,16 @@ public class CategoryListTests
     }
 
     [Fact]
+    public void AddCategory_increments_version()
+    {
+        var (list, _) = CategoryList.Create("user-1");
+        var before = list.Version;
+        list.AddCategory("Hobby", "#FF0000", "star");
+
+        list.Version.Should().Be(before + 1);
+    }
+
+    [Fact]
     public void AddCategory_fails_when_color_is_invalid()
     {
         var (list, _) = CategoryList.Create("user-1");

@@ -59,6 +59,7 @@ public class CategoryList
         var order = _categories.Count;
         var category = new Category(id, name.Trim(), color, icon, order, DateTimeOffset.UtcNow);
         _categories.Add(category);
+        Version++;
 
         return DomainResult<CategoryAddedEvent>.Ok(
             new CategoryAddedEvent(UserId, id, category.Name, color, icon, order));

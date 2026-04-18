@@ -10,6 +10,18 @@ namespace TodoList.Domain.Projectors;
 /// </summary>
 public static class CategoryProjector
 {
+    /// <summary>
+    /// Projects into a list-level summary including the aggregate version (taken from
+    /// the highest <see cref="DomainEventEnvelope.AggregateVersion"/> across events).
+    /// Callers needing optimistic-concurrency should use this over <see cref="ProjectAll"/>.
+    /// </summary>
+    public static CategoryListSummary ProjectList(IReadOnlyList<DomainEventEnvelope> events)
+    {
+        var categories = ProjectAll(events);
+        var version = events.Count > 0 ? events.Max(e => e.AggregateVersion) : 0;
+        return new CategoryListSummary { Version = version, Categories = categories };
+    }
+
     public static List<CategorySummary> ProjectAll(IReadOnlyList<DomainEventEnvelope> events)
     {
         var state = new Dictionary<Guid, CategorySummary>();

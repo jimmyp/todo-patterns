@@ -23,9 +23,17 @@ public class TodoExtendedEndpointTests(ApiFixture fixture) : IClassFixture<ApiFi
         var renameAccepted = await renameResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
         await fixture.PollOperationAsync(renameAccepted!.OperationId);
 
-        var todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos");
-        todos!.Should().Contain(t => t.GetProperty("id").GetGuid() == todoId
-                                   && t.GetProperty("title").GetString() == "Renamed");
+        // Projection is async — poll until the renamed title is visible
+        JsonElement[] todos = [];
+        for (var i = 0; i < 20; i++)
+        {
+            todos = await fixture.Client.GetFromJsonAsync<JsonElement[]>("/todos") ?? [];
+            if (todos.Any(t => t.GetProperty("id").GetGuid() == todoId
+                               && t.GetProperty("title").GetString() == "Renamed")) break;
+            await Task.Delay(100);
+        }
+        todos.Should().Contain(t => t.GetProperty("id").GetGuid() == todoId
+                                  && t.GetProperty("title").GetString() == "Renamed");
     }
 
     [Fact]

@@ -72,7 +72,7 @@
             var command = new ClientCommand
             {
                 AggregateId = CategoryListAggregateId,
-                ExpectedVersion = 0,
+                ExpectedVersion = CategoryStore.ListVersion,
                 Type = nameof(TodoList.Domain.Commands.AddCategoryCommand),
                 Payload = JsonSerializer.SerializeToElement(new { name = data.Name, color = data.Color, icon = data.Icon }),
                 ApiEndpoint = "/categories",
@@ -81,7 +81,7 @@
             var speculativeEvent = new ClientEvent
             {
                 AggregateId = CategoryListAggregateId,
-                AggregateVersion = 1,
+                AggregateVersion = CategoryStore.ListVersion + 1,
                 Type = "CategoryAdded",
                 Payload = JsonSerializer.SerializeToElement(new { name = data.Name, color = data.Color, icon = data.Icon }),
                 Timestamp = DateTimeOffset.UtcNow,
@@ -108,7 +108,7 @@
             var command = new ClientCommand
             {
                 AggregateId = CategoryListAggregateId,
-                ExpectedVersion = cat.Version,
+                ExpectedVersion = CategoryStore.ListVersion,
                 Type = nameof(TodoList.Domain.Commands.RenameCategoryCommand),
                 Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id, newName = data.Name }),
                 ApiEndpoint = $"/categories/{cat.Id}/rename",
@@ -117,7 +117,7 @@
             var speculativeEvent = new ClientEvent
             {
                 AggregateId = CategoryListAggregateId,
-                AggregateVersion = cat.Version + 1,
+                AggregateVersion = CategoryStore.ListVersion + 1,
                 Type = "CategoryRenamed",
                 Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id, newName = data.Name }),
                 Timestamp = DateTimeOffset.UtcNow,
@@ -133,7 +133,7 @@
         var command = new ClientCommand
         {
             AggregateId = CategoryListAggregateId,
-            ExpectedVersion = cat.Version,
+            ExpectedVersion = CategoryStore.ListVersion,
             Type = nameof(TodoList.Domain.Commands.RemoveCategoryCommand),
             Payload = null,
             ApiEndpoint = $"/categories/{cat.Id}",
@@ -143,7 +143,7 @@
         var speculativeEvent = new ClientEvent
         {
             AggregateId = CategoryListAggregateId,
-            AggregateVersion = cat.Version + 1,
+            AggregateVersion = CategoryStore.ListVersion + 1,
             Type = "CategoryRemoved",
             Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id }),
             Timestamp = DateTimeOffset.UtcNow,

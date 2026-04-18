@@ -1,5 +1,6 @@
 // TodoList.Web/Client/Services/OperationPoller.cs
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace TodoList.Web.Client.Services;
 
@@ -13,8 +14,8 @@ public class OperationPoller
     }
 
     /// <summary>
-    /// Polls GET /operations/{id} until terminal status.
-    /// Returns the confirmed ClientEvent on success, null on failure/timeout.
+    /// Polls GET /todos/operations/{id} until terminal status.
+    /// Returns the operation result on success, failure reason on failure.
     /// </summary>
     public async Task<OperationResult> PollAsync(string operationId, CancellationToken ct = default)
     {
@@ -25,7 +26,7 @@ public class OperationPoller
         {
             try
             {
-                var response = await _http.GetAsync($"/operations/{operationId}", ct);
+                var response = await _http.GetAsync($"/todos/operations/{operationId}", ct);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -34,8 +35,8 @@ public class OperationPoller
 
                     return body.Status switch
                     {
-                        "complete" => OperationResult.Success(body.Event),
-                        "failed" => OperationResult.Failed(body.Error ?? "Operation failed"),
+                        "complete" => OperationResult.Success(body.Result),
+                        "failed" => OperationResult.Failed(body.FailureReason ?? "Operation failed"),
                         "pending" or "processing" => null!, // keep polling
                         _ => OperationResult.Failed($"Unknown status: {body.Status}")
                     };
@@ -64,18 +65,19 @@ public class OperationPoller
 public record OperationResponse
 {
     public string Status { get; init; } = "";
-    public TodoList.Web.Client.Store.ClientEvent? Event { get; init; }
-    public string? Error { get; init; }
+    public JsonElement? Result { get; init; }
+    public string? FailureReason { get; init; }
+    public bool IsRetryable { get; init; }
 }
 
 public record OperationResult
 {
     public bool IsSuccess { get; init; }
-    public TodoList.Web.Client.Store.ClientEvent? Event { get; init; }
-    public string? ErrorMessage { get; init; }
+    public JsonElement? Result { get; init; }
+    public string? FailureReason { get; init; }
 
-    public static OperationResult Success(TodoList.Web.Client.Store.ClientEvent? evt) =>
-        new() { IsSuccess = true, Event = evt };
-    public static OperationResult Failed(string error) =>
-        new() { IsSuccess = false, ErrorMessage = error };
+    public static OperationResult Success(JsonElement? result) =>
+        new() { IsSuccess = true, Result = result };
+    public static OperationResult Failed(string reason) =>
+        new() { IsSuccess = false, FailureReason = reason };
 }

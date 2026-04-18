@@ -1,36 +1,32 @@
 // TodoList.Api/Handlers/CategoryCommandHandlers.cs
+using System.Text.Json;
 using TodoList.Api.Data;
 using TodoList.Api.Operations;
 using TodoList.Domain;
 using TodoList.Domain.Aggregates;
 using TodoList.Domain.Commands;
 using TodoList.Domain.Events;
+using Wolverine.Attributes;
 
 namespace TodoList.Api.Handlers;
 
+[WolverineHandler]
 public static class CategoryCommandHandlers
 {
-    public static async Task<object[]> Handle(SeedCategoriesCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
-    {
-        var existing = await repo.GetByUserIdAsync(cmd.UserId);
-        if (existing is not null)
-        {
-            await CompleteOperation(ops, cmd.OperationId, "already-seeded");
-            return [];
-        }
-
-        var (list, events) = CategoryList.Create(cmd.UserId);
-        await repo.AddAsync(list);
-        await repo.SaveAsync();
-        await CompleteOperation(ops, cmd.OperationId, "seeded");
-        return events.Select(e => (object)e).ToArray();
-    }
-
     public static async Task<object[]> Handle(AddCategoryCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
     {
+        var cascaded = new List<object>();
         var list = await repo.GetByUserIdAsync(cmd.UserId);
-        if (list is null) { await FailOperation(ops, cmd.OperationId, "CategoryList not found"); return []; }
-        if (cmd.ExpectedVersion > 0 && list.Version != cmd.ExpectedVersion)
+        if (list is null)
+        {
+            // First-use auto-seed: create CategoryList with default categories for this user.
+            // Spec S1/S2: no explicit seed endpoint — seeding is a side-effect of first mutation.
+            var (newList, seedEvents) = CategoryList.Create(cmd.UserId);
+            await repo.AddAsync(newList);
+            list = newList;
+            cascaded.AddRange(seedEvents.Select(e => (object)e));
+        }
+        else if (cmd.ExpectedVersion > 0 && list.Version != cmd.ExpectedVersion)
         {
             await ConflictOperation(ops, cmd.OperationId, list.Version);
             return [];
@@ -40,8 +36,9 @@ public static class CategoryCommandHandlers
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
         await repo.SaveAsync();
-        await CompleteOperation(ops, cmd.OperationId, result.Value!.CategoryId.ToString());
-        return [result.Value!];
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = result.Value!.CategoryId }));
+        cascaded.Add(result.Value!);
+        return cascaded.ToArray();
     }
 
     public static async Task<object[]> Handle(RenameCategoryCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
@@ -58,7 +55,7 @@ public static class CategoryCommandHandlers
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
         await repo.SaveAsync();
-        await CompleteOperation(ops, cmd.OperationId, cmd.CategoryId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
         return [result.Value!];
     }
 
@@ -76,7 +73,7 @@ public static class CategoryCommandHandlers
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
         await repo.SaveAsync();
-        await CompleteOperation(ops, cmd.OperationId, cmd.CategoryId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
         return [result.Value!];
     }
 
@@ -94,7 +91,7 @@ public static class CategoryCommandHandlers
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
         await repo.SaveAsync();
-        await CompleteOperation(ops, cmd.OperationId, cmd.CategoryId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
         return [result.Value!];
     }
 
@@ -112,7 +109,7 @@ public static class CategoryCommandHandlers
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
         await repo.SaveAsync();
-        await CompleteOperation(ops, cmd.OperationId, cmd.CategoryId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
         return [result.Value!];
     }
 
@@ -130,7 +127,7 @@ public static class CategoryCommandHandlers
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
         await repo.SaveAsync();
-        await CompleteOperation(ops, cmd.OperationId, cmd.CategoryId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
         return [result.Value!];
     }
 

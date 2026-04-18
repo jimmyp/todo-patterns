@@ -350,30 +350,34 @@ The `DueReminderSaga` extends `Wolverine.Saga` which requires the `WolverineFx` 
 
 The `CommandDispatcher` currently reflects over `ISagaDefinition` in the Domain assembly. Since the saga stays in Api (server-side), and the client (Blazor WASM) can't reference the Api assembly, we need a different approach.
 
-**Option chosen: Marker attribute on the command type in Domain.**
+**Option chosen: Marker attribute on the initiating domain event in Domain.**
 
-Add a `[SagaInitiator]` attribute to `TodoList.Domain/Commands/`:
+Add a `[SagaInitiator]` attribute to `TodoList.Domain/Sagas/`:
 
 ```csharp
-[AttributeUsage(AttributeTargets.Class)]
-public class SagaInitiatorAttribute : Attribute { }
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+public sealed class SagaInitiatorAttribute : Attribute;
 ```
 
-Apply it to `SetDueDateCommand`:
+Apply it to the domain event that initiates the saga (not the command) — the saga's `Start(...)` takes the event, so the event is the authoritative trigger:
 ```csharp
 [SagaInitiator]
-public record SetDueDateCommand(...);
+public record TodoDueDateSetEvent(Guid TodoId, DateTimeOffset DueDate, string? UserId = null) : IDomainEvent;
 ```
 
-`CommandDispatcher.DiscoverSagaInitiatingTypes()` reflects over Domain assembly command types that have `[SagaInitiator]`:
+`CommandDispatcher.DiscoverSagaInitiatingTypes()` reflects over the Domain assembly, finds types with `[SagaInitiator]`, and strips the `Event` suffix to get the command/intent name the client can match:
 ```csharp
 private static HashSet<string> DiscoverSagaInitiatingTypes()
 {
-    return typeof(TodoList.Domain.Commands.CreateTodoCommand).Assembly
-        .GetTypes()
-        .Where(t => t.GetCustomAttributes(typeof(SagaInitiatorAttribute), false).Any())
-        .Select(t => t.Name)
-        .ToHashSet();
+    var results = new HashSet<string>();
+    foreach (var type in typeof(IDomainEvent).Assembly.GetTypes()
+                 .Where(t => t.GetCustomAttributes(typeof(SagaInitiatorAttribute), inherit: false).Length > 0))
+    {
+        var name = type.Name;
+        if (name.EndsWith("Event")) name = name[..^"Event".Length];
+        results.Add(name);
+    }
+    return results;
 }
 ```
 

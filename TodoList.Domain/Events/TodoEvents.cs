@@ -1,4 +1,6 @@
 // TodoList.Domain/Events/TodoEvents.cs
+using TodoList.Domain.Sagas;
+
 namespace TodoList.Domain.Events;
 
 public record TodoCreatedEvent(Guid TodoId, string Title, DateTimeOffset CreatedAt) : IDomainEvent;
@@ -8,7 +10,10 @@ public record TodoDeletedEvent(Guid TodoId, DateTimeOffset DeletedAt) : IDomainE
 public record TodoRenamedEvent(Guid TodoId, string NewTitle) : IDomainEvent;
 public record TodoCategoryAssignedEvent(Guid TodoId, Guid CategoryId) : IDomainEvent;
 public record TodoCategoryUnassignedEvent(Guid TodoId) : IDomainEvent;
+
+[SagaInitiator]
 public record TodoDueDateSetEvent(Guid TodoId, DateTimeOffset DueDate, string? UserId = null) : IDomainEvent;
+
 public record TodoDueDateClearedEvent(Guid TodoId) : IDomainEvent;
 public record TodoNotesUpdatedEvent(Guid TodoId, string? Notes) : IDomainEvent;
 public record TodoProgressUpdatedEvent(Guid TodoId, int Progress) : IDomainEvent;

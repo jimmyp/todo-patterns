@@ -33,13 +33,21 @@ public class TestAuthHandler(
     public const string SchemeName = "Test";
     public const string TestUserId = "test-user-001";
 
+    // Optional header to switch user identity within a test — lets a single HttpClient
+    // impersonate different users (e.g. cross-user isolation tests).
+    public const string UserHeader = "X-Test-User";
+
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        var overrideUser = Request.Headers[UserHeader].FirstOrDefault();
+        var userId = overrideUser ?? TestUserId;
+        var email = overrideUser is null ? "test@example.com" : $"{userId}@example.com";
+        var name = overrideUser is null ? "Test User" : userId;
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, TestUserId),
-            new Claim(ClaimTypes.Email, "test@example.com"),
-            new Claim(ClaimTypes.Name, "Test User"),
+            new Claim(ClaimTypes.NameIdentifier, userId),
+            new Claim(ClaimTypes.Email, email),
+            new Claim(ClaimTypes.Name, name),
             new Claim("auth_method", "test")
         };
         var identity = new ClaimsIdentity(claims, SchemeName);

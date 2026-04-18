@@ -29,6 +29,6 @@ public static class OperationEndpoints
                 createdAt     = operation.CreatedAt,
                 completedAt   = operation.CompletedAt
             });
-        });
+        }).RequireAuthorization();
     }
 }

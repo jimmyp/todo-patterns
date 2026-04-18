@@ -7,7 +7,7 @@ namespace TodoList.Web.Client.Store;
 public class LocalCategoryStore : ILocalCategoryStore
 {
     private readonly IClientStore _clientStore;
-    private List<CategorySummary> _categories = [];
+    private CategoryListSummary _summary = new();
 
     public event Action OnChange = delegate { };
 
@@ -17,13 +17,14 @@ public class LocalCategoryStore : ILocalCategoryStore
         _clientStore.OnAggregateChanged += _ => Rebuild();
     }
 
-    public IReadOnlyList<CategorySummary> Categories => _categories.AsReadOnly();
-    public CategorySummary? GetById(Guid id) => _categories.FirstOrDefault(c => c.Id == id);
+    public IReadOnlyList<CategorySummary> Categories => _summary.Categories;
+    public int ListVersion => _summary.Version;
+    public CategorySummary? GetById(Guid id) => _summary.Categories.FirstOrDefault(c => c.Id == id);
 
     private void Rebuild()
     {
         var allEvents = _clientStore.GetAllEvents();
-        _categories = CategoryProjector.ProjectAll(allEvents
+        _summary = CategoryProjector.ProjectList(allEvents
             .Select(e => new DomainEventEnvelope(e.AggregateId, e.AggregateVersion, e.Type, e.Payload))
             .ToList());
         OnChange();

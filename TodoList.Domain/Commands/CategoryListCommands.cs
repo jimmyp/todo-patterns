@@ -1,7 +1,6 @@
 // TodoList.Domain/Commands/CategoryListCommands.cs
 namespace TodoList.Domain.Commands;
 
-public record SeedCategoriesCommand(string UserId, Guid OperationId);
 public record AddCategoryCommand(string Name, string Color, string Icon, string UserId, Guid OperationId, int ExpectedVersion = 0);
 public record RenameCategoryCommand(Guid CategoryId, string NewName, string UserId, Guid OperationId, int ExpectedVersion = 0);
 public record ChangeCategoryColorCommand(Guid CategoryId, string Color, string UserId, Guid OperationId, int ExpectedVersion = 0);

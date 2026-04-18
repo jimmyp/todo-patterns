@@ -1,8 +1,8 @@
-// TodoList.Domain/Sagas/DueReminderSaga.cs
+// TodoList.Api/Sagas/DueReminderSaga.cs
 using TodoList.Domain.Events;
 using Wolverine;
 
-namespace TodoList.Domain.Sagas;
+namespace TodoList.Api.Sagas;
 
 /// <summary>
 /// Saga that fires a reminder when a todo's due date is within 24 hours.
@@ -12,8 +12,9 @@ namespace TodoList.Domain.Sagas;
 ///   2. Updates the schedule if the due date changes
 ///   3. Completes when the reminder fires OR when the due date is cleared/todo deleted
 ///
-/// Pure domain logic — lives in TodoList.Domain so the client can reflect over
-/// Saga&lt;T&gt; subclasses to discover which events/commands initiate sagas.
+/// Lives in TodoList.Api because it depends on WolverineFx. The triggering event
+/// (TodoDueDateSetEvent) is marked with [SagaInitiator] in TodoList.Domain so the
+/// client can show an appropriate toast without taking a WolverineFx dependency.
 /// </summary>
 public class DueReminderSaga : Saga
 {

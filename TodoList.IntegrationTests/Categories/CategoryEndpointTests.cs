@@ -8,12 +8,7 @@ public class CategoryEndpointTests(ApiFixture fixture) : IClassFixture<ApiFixtur
     [Fact]
     public async Task GetCategories_returns_seeded_categories_for_new_user()
     {
-        // Seed categories via Wolverine command
-        var seedResponse = await fixture.Client.PostAsync("/categories/seed", null);
-        seedResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
-        var seedAccepted = await seedResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
-        await fixture.PollOperationAsync(seedAccepted!.OperationId);
-
+        // Auto-seed on first GET: the server creates a CategoryList with defaults.
         var response = await fixture.Client.GetAsync("/categories");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -57,13 +52,8 @@ public class CategoryEndpointTests(ApiFixture fixture) : IClassFixture<ApiFixtur
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 
-    private async Task EnsureSeeded()
-    {
-        var seedResponse = await fixture.Client.PostAsync("/categories/seed", null);
-        if (seedResponse.StatusCode == HttpStatusCode.Accepted)
-        {
-            var accepted = await seedResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
-            await fixture.PollOperationAsync(accepted!.OperationId);
-        }
-    }
+    // First GET triggers auto-seed server-side. Tests that mutate categories call this
+    // first so the CategoryList aggregate exists before issuing the command.
+    private async Task EnsureSeeded() =>
+        await fixture.Client.GetAsync("/categories");
 }

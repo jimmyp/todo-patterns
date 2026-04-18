@@ -85,12 +85,16 @@ The existing `DueReminderSaga` fires naturally because domain events flow throug
 
 ## 4. Saga Detection Fix
 
-Move `DueReminderSaga` to `TodoList.Domain/Sagas/`. The saga is pure domain logic (state transitions, message routing) with no server dependencies. `NotificationHandlers` stays in `TodoList.Api` — it does the actual I/O.
+`DueReminderSaga` stays in `TodoList.Api/Sagas/`. The `Wolverine.Saga` base class is a server-side persistence concern, so keeping it in the Api keeps `TodoList.Domain` free of `WolverineFx` (and keeps the Blazor WASM client's transitive package graph small — it references Domain).
 
-Delete `ISagaDefinition` and `DueReminderSagaDefinition`. They're unnecessary indirection — `CommandDispatcher` can reflect over `Saga<T>` subclasses in `TodoList.Domain` and inspect their `Start` methods to discover which command types initiate sagas.
+Saga discovery is attribute-based rather than reflective over `Saga<T>` subclasses:
 
-- Client reflects over `TodoList.Domain` assembly → finds `DueReminderSaga` (a `Saga<T>` subclass) → inspects `Start` method parameter type → shows saga toast for that command type
-- Server's Wolverine scans `TodoList.Domain` assembly → finds `DueReminderSaga` → runs it
+- A new `[SagaInitiator]` attribute lives in `TodoList.Domain/Sagas/` — just a marker, no WolverineFx dependency
+- Domain events that initiate a saga are decorated with it (e.g. `[SagaInitiator] record TodoDueDateSetEvent(...)`)
+- Client's `CommandDispatcher` reflects over `TodoList.Domain` assembly → finds types with `[SagaInitiator]` → strips `"Event"` suffix → shows saga toast for matching command types
+- Server's Wolverine discovers sagas normally by scanning the Api assembly (no special config needed)
+
+Delete `ISagaDefinition` and `DueReminderSagaDefinition`. They're unnecessary indirection — the attribute on the triggering event is enough.
 
 ---
 

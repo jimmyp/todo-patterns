@@ -7,9 +7,11 @@ using TodoList.Domain.Aggregates;
 using TodoList.Domain.Commands;
 using TodoList.Domain.Events;
 using Wolverine;
+using Wolverine.Attributes;
 
 namespace TodoList.Api.Handlers;
 
+[WolverineHandler]
 public static class TodoCommandHandlers
 {
     public static async Task<object[]> Handle(CreateTodoCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -41,7 +43,7 @@ public static class TodoCommandHandlers
         var result = todo.Rename(cmd.NewTitle);
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -56,7 +58,7 @@ public static class TodoCommandHandlers
         var result = todo.Complete(DateTimeOffset.UtcNow);
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -71,7 +73,7 @@ public static class TodoCommandHandlers
         var result = todo.Uncomplete();
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -86,7 +88,7 @@ public static class TodoCommandHandlers
         var result = todo.Delete(DateTimeOffset.UtcNow);
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -101,7 +103,7 @@ public static class TodoCommandHandlers
         var result = todo.AssignCategory(cmd.CategoryId);
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -116,7 +118,7 @@ public static class TodoCommandHandlers
         var result = todo.UnassignCategory();
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -131,7 +133,7 @@ public static class TodoCommandHandlers
         var result = todo.SetDueDate(cmd.DueDate);
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -146,7 +148,7 @@ public static class TodoCommandHandlers
         var result = todo.ClearDueDate();
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -161,7 +163,7 @@ public static class TodoCommandHandlers
         var result = todo.UpdateNotes(cmd.Notes);
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }
@@ -176,7 +178,7 @@ public static class TodoCommandHandlers
         var result = todo.UpdateProgress(cmd.Progress);
         if (!result.IsSuccess) { await FailOperation(ops, cmd.OperationId, result.Errors); return []; }
 
-        await CompleteOperation(ops, cmd.OperationId, cmd.TodoId.ToString());
+        await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
         return WrapEvents(result.Value!, cmd.UserId);
     }

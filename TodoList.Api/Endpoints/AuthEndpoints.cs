@@ -9,7 +9,12 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        // GET /api/me — returns current user identity
+        // GET /api/me — returns current user identity as seen by the Api.
+        //
+        // The Blazor WASM client does NOT hit this endpoint — it goes through Web.Server's
+        // AuthController because that's the origin that owns the browser cookie. This Api
+        // endpoint exists for server-to-server callers (e.g. future MCP tools that present
+        // an API key and want to check which user they've been bound to).
         app.MapGet("/api/me", (HttpContext ctx) =>
         {
             if (ctx.User.Identity?.IsAuthenticated != true)

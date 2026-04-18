@@ -1,7 +1,9 @@
 // TodoList.Api/EventHandlers/TodoProjectionHandler.cs
+using Microsoft.AspNetCore.SignalR;
 using TodoList.Api.Data;
 using TodoList.Api.Data.Projections;
 using TodoList.Api.Handlers;
+using TodoList.Api.Hubs;
 using TodoList.Domain;
 using TodoList.Domain.Events;
 using Microsoft.EntityFrameworkCore;
@@ -10,9 +12,10 @@ namespace TodoList.Api.EventHandlers;
 
 /// <summary>
 /// Wolverine event handler — subscribes to UserScopedEvent (cascaded from command handlers)
-/// and updates TodoSummary projections.
+/// and updates TodoSummary projections. After persistence, pushes the event to the
+/// originating user's SignalR group so the client can replace its speculative event.
 /// </summary>
-public class TodoProjectionHandler(TodoDbContext db)
+public class TodoProjectionHandler(TodoDbContext db, IHubContext<EventHub, IEventHubClient> hub)
 {
     public async Task Handle(UserScopedEvent envelope)
     {
@@ -108,5 +111,13 @@ public class TodoProjectionHandler(TodoDbContext db)
         }
 
         await db.SaveChangesAsync();
+
+        // Push the authoritative event to the user's SignalR group so the client can
+        // replace its speculative entry. Scoped by UserId to avoid leaking across users.
+        await hub.Clients.Group($"user:{userId}").ReceiveEvent(new
+        {
+            type = evt.GetType().Name.Replace("Event", ""),
+            payload = evt
+        });
     }
 }

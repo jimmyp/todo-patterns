@@ -12,7 +12,7 @@ public static class TodoEndpoints
 {
     public static void MapTodoEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/todos");
+        var group = app.MapGroup("/todos").RequireAuthorization();
 
         group.MapGet("/", async (TodoDbContext db, HttpContext ctx) =>
         {
@@ -48,7 +48,7 @@ public static class TodoEndpoints
             await ops.AddAsync(new TodoOperation { Id = operationId, Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
             await ops.SaveAsync();
 
-            await bus.PublishAsync(new CreateTodoCommand(
+            await bus.InvokeAsync(new CreateTodoCommand(
                 request.Title, userId, operationId,
                 request.CategoryId, request.DueDate, request.Notes, request.Progress ?? 0));
 
@@ -61,70 +61,70 @@ public static class TodoEndpoints
         group.MapPost("/{id:guid}/complete", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new CompleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new CompleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id:guid}/uncomplete", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new UncompleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new UncompleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapDelete("/{id:guid}", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new DeleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new DeleteTodoCommand(id, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id:guid}/rename", async (Guid id, RenameTodoRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new RenameTodoCommand(id, req.Title, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new RenameTodoCommand(id, req.Title, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id:guid}/assign-category", async (Guid id, AssignCategoryRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new AssignCategoryCommand(id, req.CategoryId, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new AssignCategoryCommand(id, req.CategoryId, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id:guid}/unassign-category", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new UnassignCategoryCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new UnassignCategoryCommand(id, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id:guid}/set-due-date", async (Guid id, SetDueDateRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new SetDueDateCommand(id, req.DueDate, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new SetDueDateCommand(id, req.DueDate, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id:guid}/clear-due-date", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new ClearDueDateCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new ClearDueDateCommand(id, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id:guid}/update-notes", async (Guid id, UpdateNotesRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new UpdateNotesCommand(id, req.Notes, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new UpdateNotesCommand(id, req.Notes, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id:guid}/update-progress", async (Guid id, UpdateProgressRequest req, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.PublishAsync(new UpdateProgressCommand(id, req.Progress, GetUserId(ctx), operationId, expectedVersion));
+            await bus.InvokeAsync(new UpdateProgressCommand(id, req.Progress, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
     }
