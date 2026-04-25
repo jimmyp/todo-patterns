@@ -97,129 +97,132 @@ public class CommandDispatcher
         return null; // No client-side validation errors (passed in from caller before Dispatch)
     }
 
+    private static readonly int[] RetryDelaysMs = [200, 400, 800];
+    private const int MaxRetries = 3;
+
     internal async Task DispatchToServer(ClientCommand command, string aggregateId)
     {
-        const int maxRetries = 3;
-        int[] retryDelaysMs = [200, 400, 800];
-
-        for (var attempt = 0; attempt <= maxRetries; attempt++)
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
+            HttpResponseMessage? response;
             try
             {
-                var method = new HttpMethod(command.HttpMethod);
-                var request = new HttpRequestMessage(method, command.ApiEndpoint)
-                {
-                    Content = command.Payload is { } payload ? JsonContent.Create(payload) : null
-                };
-                request.Headers.Add("X-Expected-Version", command.ExpectedVersion.ToString());
-
-                var response = await _http.SendAsync(request);
-
-                // Retry on 5xx — transient server error
-                var statusCode = (int)response.StatusCode;
-                if (statusCode >= 500 && attempt < maxRetries)
-                {
-                    await Task.Delay(retryDelaysMs[attempt]);
-                    continue;
-                }
-
-                switch (response.StatusCode)
-                {
-                case HttpStatusCode.Accepted: // 202
-                {
-                    var location = response.Headers.Location?.ToString()
-                        ?? response.Headers.GetValues("Location").FirstOrDefault();
-                    if (location is null) break;
-                    var operationId = location.Split('/').Last();
-                    var result = await _poller.PollAsync(operationId);
-
-                    if (result.IsSuccess)
-                    {
-                        // The authoritative event will arrive via SignalR push; mark the
-                        // command synced so UI stops showing "unsynced" state. The
-                        // speculative event remains in place until the server event
-                        // replaces it via ReplaceSpeculative triggered by the push.
-                        _store.MarkSynced(command.Id);
-                    }
-                    else if (result.FailureReason?.Contains("Version conflict", StringComparison.OrdinalIgnoreCase) == true)
-                    {
-                        // Version conflict — server has a newer version. The SignalR push
-                        // for whatever caused the conflict will already have arrived or
-                        // will arrive shortly, reconciling our store. Discard speculative
-                        // and let the user retry.
-                        _store.DiscardSpeculative(aggregateId);
-                        _store.MarkSynced(command.Id);
-                        _snackbar.Add(
-                            "Your change was overridden by a newer update.",
-                            Severity.Warning);
-                    }
-                    else
-                    {
-                        _store.DiscardSpeculative(aggregateId);
-                        _store.MarkSynced(command.Id);
-                        _snackbar.Add($"Sync failed: {result.FailureReason}", Severity.Error);
-                    }
-                    break;
-                }
-                case HttpStatusCode.UnprocessableEntity: // 422
-                {
-                    var body = await response.Content.ReadFromJsonAsync<ValidationConflictResponse>();
-                    if (body?.Errors is not null)
-                    {
-                        _store.MarkConflicted(aggregateId, body.Errors
-                            .Select(e => new ValidationError(e.Field, e.Message))
-                            .ToList());
-                        _snackbar.Add(
-                            $"Couldn't be saved — {body.Errors.FirstOrDefault()?.Message}",
-                            Severity.Warning,
-                            config =>
-                            {
-                                config.Action = "Review";
-                                config.ActionColor = Color.Warning;
-                                // Review action navigates to the item — caller can listen to OnReviewRequested
-                            });
-                    }
-                    break;
-                }
-                case HttpStatusCode.NotFound: // 404 on delete/complete = treat as success
-                {
-                    _store.DiscardSpeculative(aggregateId);
-                    _store.MarkSynced(command.Id);
-                    break;
-                }
-                case HttpStatusCode.Unauthorized: // 401
-                {
-                    // Let ConnectivityBanner or auth redirect handle this
-                    break;
-                }
-                default:
-                {
-                    if (statusCode >= 500)
-                    {
-                        // All retries exhausted — leave in unsynced state
-                        break;
-                    }
-                    // Other 4xx — discard speculative, show error
-                    _store.DiscardSpeculative(aggregateId);
-                    _store.MarkSynced(command.Id);
-                    _snackbar.Add($"Command failed ({statusCode})", Severity.Error);
-                    break;
-                }
+                response = await SendAsync(command);
+            }
+            catch (HttpRequestException)
+            {
+                // Network error — retry, or leave queued for SyncService on final attempt
+                if (attempt < MaxRetries) { await Task.Delay(RetryDelaysMs[attempt]); continue; }
+                return;
             }
 
-            // If we handled the response, break out of retry loop
-            break;
-        }
-        catch (HttpRequestException)
-        {
-            if (attempt < maxRetries)
+            var statusCode = (int)response.StatusCode;
+            if (statusCode >= 500 && attempt < MaxRetries)
             {
-                await Task.Delay(retryDelaysMs[attempt]);
+                await Task.Delay(RetryDelaysMs[attempt]);
                 continue;
             }
-            // Network error — leave in unsynced state, SyncService replays on reconnect
+
+            await HandleResponse(response, command, aggregateId);
+            return;
         }
-        } // end for
+    }
+
+    private Task<HttpResponseMessage> SendAsync(ClientCommand command)
+    {
+        var request = new HttpRequestMessage(new HttpMethod(command.HttpMethod), command.ApiEndpoint)
+        {
+            Content = command.Payload is { } payload ? JsonContent.Create(payload) : null
+        };
+        request.Headers.Add("X-Expected-Version", command.ExpectedVersion.ToString());
+        return _http.SendAsync(request);
+    }
+
+    /// <summary>
+    /// Decides what the client store should do based on the server response.
+    /// One responsibility: response → store mutation. The retry loop is the caller's job.
+    /// </summary>
+    private async Task HandleResponse(HttpResponseMessage response, ClientCommand command, string aggregateId)
+    {
+        var statusCode = (int)response.StatusCode;
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.Accepted: // 202 — async operation; poll until terminal
+                await HandleAcceptedAsync(response, command, aggregateId);
+                return;
+
+            case HttpStatusCode.UnprocessableEntity: // 422 — validation errors on the synchronous reject path
+                await HandleValidationConflictAsync(response, aggregateId);
+                return;
+
+            case HttpStatusCode.NotFound: // 404 on delete/complete = treat as success
+                _store.DiscardSpeculative(aggregateId);
+                _store.MarkSynced(command.Id);
+                return;
+
+            case HttpStatusCode.Unauthorized: // 401 — auth redirect handles it
+                return;
+
+            default:
+                if (statusCode >= 500)
+                    return; // Retries exhausted; leave queued for SyncService
+                // Other 4xx — discard speculative, show error
+                _store.DiscardSpeculative(aggregateId);
+                _store.MarkSynced(command.Id);
+                _snackbar.Add($"Command failed ({statusCode})", Severity.Error);
+                return;
+        }
+    }
+
+    private async Task HandleAcceptedAsync(HttpResponseMessage response, ClientCommand command, string aggregateId)
+    {
+        var location = response.Headers.Location?.ToString()
+            ?? response.Headers.GetValues("Location").FirstOrDefault();
+        if (location is null) return;
+
+        var operationId = location.Split('/').Last();
+        var result = await _poller.PollAsync(operationId);
+
+        if (result.IsSuccess)
+        {
+            // The authoritative event will arrive via SignalR push; mark the command
+            // synced so UI stops showing "unsynced". The speculative event remains in
+            // place until the server event replaces it via ReplaceSpeculative.
+            _store.MarkSynced(command.Id);
+            return;
+        }
+
+        // Failed: branch on machine-readable FailureCode (no substring matching).
+        if (result.FailureCode == FailureCodes.VersionConflict)
+        {
+            _store.DiscardSpeculative(aggregateId);
+            _store.MarkSynced(command.Id);
+            _snackbar.Add("Your change was overridden by a newer update.", Severity.Warning);
+        }
+        else
+        {
+            _store.DiscardSpeculative(aggregateId);
+            _store.MarkSynced(command.Id);
+            _snackbar.Add($"Sync failed: {result.FailureReason}", Severity.Error);
+        }
+    }
+
+    private async Task HandleValidationConflictAsync(HttpResponseMessage response, string aggregateId)
+    {
+        var body = await response.Content.ReadFromJsonAsync<ValidationConflictResponse>();
+        if (body?.Errors is null) return;
+
+        _store.MarkConflicted(aggregateId, body.Errors
+            .Select(e => new ValidationError(e.Field, e.Message))
+            .ToList());
+        _snackbar.Add(
+            $"Couldn't be saved — {body.Errors.FirstOrDefault()?.Message}",
+            Severity.Warning,
+            config =>
+            {
+                config.Action = "Review";
+                config.ActionColor = Color.Warning;
+            });
     }
 }
 

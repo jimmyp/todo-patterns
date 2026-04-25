@@ -9,12 +9,17 @@ public class CategoryEndpointTests(ApiFixture fixture) : IClassFixture<ApiFixtur
     public async Task GetCategories_returns_seeded_categories_for_new_user()
     {
         // Auto-seed on first GET: the server creates a CategoryList with defaults.
+        // Endpoint returns { version, categories: [...] } — version carries the
+        // CategoryList aggregate version for ExpectedVersion on subsequent commands.
         var response = await fixture.Client.GetAsync("/categories");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var categories = await response.Content.ReadFromJsonAsync<CategorySummary[]>();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var categories = body.GetProperty("categories").EnumerateArray()
+            .Select(c => c.GetProperty("name").GetString()!)
+            .ToList();
         categories.Should().HaveCountGreaterThanOrEqualTo(4);
-        categories!.Select(c => c.Name).Should().Contain(["Personal", "Work", "Urgent", "Design"]);
+        categories.Should().Contain(["Personal", "Work", "Urgent", "Design"]);
     }
 
     [Fact]
@@ -45,8 +50,8 @@ public class CategoryEndpointTests(ApiFixture fixture) : IClassFixture<ApiFixtur
     public async Task DeleteCategory_returns_202()
     {
         await EnsureSeeded();
-        var cats = await fixture.Client.GetFromJsonAsync<CategorySummary[]>("/categories");
-        var id = cats![0].Id;
+        var body = await fixture.Client.GetFromJsonAsync<JsonElement>("/categories");
+        var id = body.GetProperty("categories")[0].GetProperty("id").GetGuid();
 
         var response = await fixture.Client.DeleteAsync($"/categories/{id}");
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);

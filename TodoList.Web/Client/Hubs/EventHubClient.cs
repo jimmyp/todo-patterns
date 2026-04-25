@@ -25,8 +25,16 @@ public class EventHubClient : IAsyncDisposable
 
         _connection.On<ClientEvent>("ReceiveEvent", evt =>
         {
-            // Server pushed an event — same path as any other confirmed event
-            _store.AppendEvent(evt with { Source = EventSource.Server, State = EventState.Confirmed });
+            var confirmed = evt with { Source = EventSource.Server, State = EventState.Confirmed };
+            // If we have a speculative event for this aggregate, replace it so the
+            // optimistic write transitions to the authoritative server version cleanly.
+            // Otherwise it's a push for an aggregate we didn't mutate — just append.
+            var hasSpeculative = _store.GetEventsFor(confirmed.AggregateId)
+                .Any(e => e.State == EventState.Speculative);
+            if (hasSpeculative)
+                _store.ReplaceSpeculative(confirmed.AggregateId, [confirmed]);
+            else
+                _store.AppendEvent(confirmed);
         });
 
         await _connection.StartAsync(ct);

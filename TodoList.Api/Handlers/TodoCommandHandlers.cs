@@ -30,7 +30,7 @@ public static class TodoCommandHandlers
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = todo.Id }));
         await repo.SaveAsync();
 
-        return WrapEvents(events, cmd.UserId);
+        return WrapEvents(events, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(RenameTodoCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -45,7 +45,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(CompleteTodoCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -60,7 +60,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(UncompleteTodoCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -75,7 +75,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(DeleteTodoCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -90,7 +90,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(AssignCategoryCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -105,7 +105,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(UnassignCategoryCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -120,7 +120,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(SetDueDateCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -135,7 +135,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(ClearDueDateCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -150,7 +150,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(UpdateNotesCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -165,7 +165,7 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
     public static async Task<object[]> Handle(UpdateProgressCommand cmd, ITodoRepository repo, IOperationRepository ops)
@@ -180,12 +180,15 @@ public static class TodoCommandHandlers
 
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.TodoId }));
         await repo.SaveAsync();
-        return WrapEvents(result.Value!, cmd.UserId);
+        return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
-    // Wolverine cascades: wrap domain events with UserId for projection handlers
-    private static object[] WrapEvents(IReadOnlyList<IDomainEvent> events, string userId) =>
-        events.Select(e => (object)new UserScopedEvent(userId, e)).ToArray();
+    // Wolverine cascades: wrap domain events with UserId, the aggregate id, and the
+    // aggregate's post-mutation version. The projection handler uses the version when
+    // pushing the authoritative event over SignalR so the client can advance ListVersion
+    // and replace its speculative entry.
+    private static object[] WrapEvents(IReadOnlyList<IDomainEvent> events, string userId, Guid aggregateId, int aggregateVersion) =>
+        events.Select(e => (object)new UserScopedEvent(userId, aggregateId.ToString(), aggregateVersion, e)).ToArray();
 
     private static async Task CompleteOperation(IOperationRepository ops, Guid operationId, string resultJson)
     {
@@ -199,13 +202,14 @@ public static class TodoCommandHandlers
         }
     }
 
-    private static async Task FailOperation(IOperationRepository ops, Guid operationId, string error)
+    private static async Task FailOperation(IOperationRepository ops, Guid operationId, string error, string code = FailureCodes.NotFound)
     {
         var op = await ops.GetByIdAsync(operationId);
         if (op is not null)
         {
             op.Status = "failed";
             op.FailureReason = error;
+            op.FailureCode = code;
             op.CompletedAt = DateTimeOffset.UtcNow;
             await ops.SaveAsync();
         }
@@ -213,7 +217,7 @@ public static class TodoCommandHandlers
 
     private static async Task FailOperation(IOperationRepository ops, Guid operationId, string[] errors)
     {
-        await FailOperation(ops, operationId, string.Join("; ", errors));
+        await FailOperation(ops, operationId, string.Join("; ", errors), FailureCodes.ValidationError);
     }
 
     private static async Task<object[]> ConflictOperation(IOperationRepository ops, Guid operationId, Guid todoId, int serverVersion)
@@ -223,6 +227,7 @@ public static class TodoCommandHandlers
         {
             op.Status = "failed";
             op.FailureReason = $"Version conflict: expected version does not match server version {serverVersion}";
+            op.FailureCode = FailureCodes.VersionConflict;
             op.CompletedAt = DateTimeOffset.UtcNow;
             await ops.SaveAsync();
         }
@@ -230,8 +235,18 @@ public static class TodoCommandHandlers
     }
 }
 
+public static class FailureCodes
+{
+    public const string VersionConflict = "VERSION_CONFLICT";
+    public const string ValidationError = "VALIDATION_ERROR";
+    public const string NotFound = "NOT_FOUND";
+    public const string InternalError = "INTERNAL_ERROR";
+}
+
 /// <summary>
-/// Wraps a domain event with the UserId that caused it.
-/// Projection handlers subscribe to this to know which user's projections to update.
+/// Wraps a domain event with the context the projection + push pipeline needs:
+/// who the user is, which aggregate the event belongs to, and what the aggregate's
+/// post-mutation version is. The version is what the SignalR push carries so the
+/// client can advance its optimistic-concurrency tracking.
 /// </summary>
-public record UserScopedEvent(string UserId, IDomainEvent Event);
+public record UserScopedEvent(string UserId, string AggregateId, int AggregateVersion, IDomainEvent Event);

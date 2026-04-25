@@ -73,11 +73,14 @@ public class CrossUserIsolationTests(ApiFixture fixture) : IClassFixture<ApiFixt
         var getB = new HttpRequestMessage(HttpMethod.Get, "/categories");
         getB.Headers.Add(TestAuthHandler.UserHeader, UserB);
         var responseB = await fixture.Client.SendAsync(getB);
-        var categoriesB = await responseB.Content.ReadFromJsonAsync<CategorySummary[]>();
+        var bodyB = await responseB.Content.ReadFromJsonAsync<JsonElement>();
+        var namesB = bodyB.GetProperty("categories").EnumerateArray()
+            .Select(c => c.GetProperty("name").GetString()!)
+            .ToList();
 
         // User B must NOT see user A's custom category
-        categoriesB!.Select(c => c.Name).Should().NotContain(customName);
+        namesB.Should().NotContain(customName);
         // But they should see the default seeds
-        categoriesB.Select(c => c.Name).Should().Contain("Personal");
+        namesB.Should().Contain("Personal");
     }
 }

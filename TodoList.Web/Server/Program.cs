@@ -3,6 +3,13 @@ builder.AddServiceDefaults();
 
 builder.Services.AddControllers();
 
+// Reverse proxy for /todos, /categories, /api/me, /hubs/* → Api project. Aspire's
+// `WithReference(api)` injects service discovery so "https+http://api" resolves to
+// the running API. Keeps the Blazor client talking to a single origin (no CORS).
+builder.Services.AddReverseProxy()
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    .AddServiceDiscoveryDestinationResolver();
+
 builder.Services
     .AddAuthentication(options =>
     {
@@ -42,6 +49,9 @@ app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 
 app.MapControllers();
+
+// Map proxied routes BEFORE the fallback so /todos/* etc. don't return index.html.
+app.MapReverseProxy();
 
 // Fallback: all unmatched routes go to Blazor index.html
 app.MapFallbackToFile("index.html");

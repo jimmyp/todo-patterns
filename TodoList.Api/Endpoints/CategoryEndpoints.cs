@@ -20,39 +20,55 @@ public static class CategoryEndpoints
 
             // Auto-seed on first access: if the user has no CategoryList yet, create
             // one with the default categories synchronously so the first GET returns them.
+            // Race safety (S13): two concurrent first-loads both see list is null. The first
+            // one to commit wins — `CategoryListEntity.UserId` is the PK so the second
+            // commit raises a unique constraint violation. Catch + re-read is enough; no
+            // SemaphoreSlim needed because uniqueness lives at the storage boundary.
             var list = await listRepo.GetByUserIdAsync(userId);
             if (list is null)
             {
-                var (newList, events) = TodoList.Domain.Aggregates.CategoryList.Create(userId);
-                await listRepo.AddAsync(newList);
-                // Project directly into the read model rather than going through Wolverine —
-                // this keeps the GET synchronous and avoids a race with async projection.
-                foreach (var e in events)
+                try
                 {
-                    db.CategorySummaries.Add(new Data.Projections.CategorySummaryEntity
+                    var (newList, events) = TodoList.Domain.Aggregates.CategoryList.Create(userId);
+                    await listRepo.AddAsync(newList);
+                    foreach (var e in events)
                     {
-                        Id = e.CategoryId,
-                        UserId = e.UserId,
-                        Name = e.Name,
-                        Color = e.Color,
-                        Icon = e.Icon,
-                        Order = e.Order,
-                        TodoCount = 0,
-                        Version = 1
-                    });
+                        db.CategorySummaries.Add(new Data.Projections.CategorySummaryEntity
+                        {
+                            Id = e.CategoryId,
+                            UserId = e.UserId,
+                            Name = e.Name,
+                            Color = e.Color,
+                            Icon = e.Icon,
+                            Order = e.Order,
+                            TodoCount = 0,
+                            Version = 1
+                        });
+                    }
+                    await listRepo.SaveAsync();
+                    await db.SaveChangesAsync();
+                    list = newList;
                 }
-                await listRepo.SaveAsync();
-                await db.SaveChangesAsync();
+                catch (DbUpdateException)
+                {
+                    // Another request seeded it first — re-read and continue.
+                    db.ChangeTracker.Clear();
+                    list = await listRepo.GetByUserIdAsync(userId);
+                }
             }
 
             var categories = await db.CategorySummaries
                 .Where(c => c.UserId == userId)
                 .OrderBy(c => c.Order)
                 .ToListAsync();
-            return Results.Ok(categories.Select(c => new
+            return Results.Ok(new
             {
-                c.Id, c.Name, c.Color, c.Icon, c.Order, c.TodoCount, c.Version
-            }));
+                version = list?.Version ?? 0,
+                categories = categories.Select(c => new
+                {
+                    c.Id, c.Name, c.Color, c.Icon, c.Order, c.TodoCount, c.Version
+                })
+            });
         });
 
         group.MapPost("/", async (AddCategoryRequest request, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>

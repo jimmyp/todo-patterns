@@ -33,13 +33,14 @@ public class OperationPoller
                     var body = await response.Content.ReadFromJsonAsync<OperationResponse>(ct);
                     if (body is null) return OperationResult.Failed("Empty response");
 
-                    return body.Status switch
+                    var terminal = body.Status switch
                     {
                         "complete" => OperationResult.Success(body.Result),
-                        "failed" => OperationResult.Failed(body.FailureReason ?? "Operation failed"),
-                        "pending" or "processing" => null!, // keep polling
-                        _ => OperationResult.Failed($"Unknown status: {body.Status}")
+                        "failed" => OperationResult.Failed(body.FailureReason ?? "Operation failed", body.FailureCode),
+                        "pending" or "processing" => null,
+                        _ => OperationResult.Failed($"Unknown status: {body.Status}", null)
                     };
+                    if (terminal is not null) return terminal;
                 }
 
                 if ((int)response.StatusCode >= 500)
@@ -67,6 +68,7 @@ public record OperationResponse
     public string Status { get; init; } = "";
     public JsonElement? Result { get; init; }
     public string? FailureReason { get; init; }
+    public string? FailureCode { get; init; }
     public bool IsRetryable { get; init; }
 }
 
@@ -75,9 +77,19 @@ public record OperationResult
     public bool IsSuccess { get; init; }
     public JsonElement? Result { get; init; }
     public string? FailureReason { get; init; }
+    public string? FailureCode { get; init; }
 
     public static OperationResult Success(JsonElement? result) =>
         new() { IsSuccess = true, Result = result };
-    public static OperationResult Failed(string reason) =>
-        new() { IsSuccess = false, FailureReason = reason };
+    public static OperationResult Failed(string reason, string? code = null) =>
+        new() { IsSuccess = false, FailureReason = reason, FailureCode = code };
+}
+
+/// <summary>Known FailureCode values returned by the API.</summary>
+public static class FailureCodes
+{
+    public const string VersionConflict = "VERSION_CONFLICT";
+    public const string ValidationError = "VALIDATION_ERROR";
+    public const string NotFound = "NOT_FOUND";
+    public const string InternalError = "INTERNAL_ERROR";
 }

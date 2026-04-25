@@ -1,4 +1,5 @@
 // TodoList.Api/EventHandlers/TodoProjectionHandler.cs
+using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using TodoList.Api.Data;
 using TodoList.Api.Data.Projections;
@@ -113,11 +114,19 @@ public class TodoProjectionHandler(TodoDbContext db, IHubContext<EventHub, IEven
         await db.SaveChangesAsync();
 
         // Push the authoritative event to the user's SignalR group so the client can
-        // replace its speculative entry. Scoped by UserId to avoid leaking across users.
+        // replace its speculative entry. Shape matches client's ClientEvent record:
+        // {Id, AggregateId, AggregateVersion, Type, Payload, Timestamp, Source, State}.
+        // Source=1 (Server), State=1 (Confirmed). camelCase to match SignalR's default JSON.
         await hub.Clients.Group($"user:{userId}").ReceiveEvent(new
         {
+            id = Guid.NewGuid().ToString(),
+            aggregateId = envelope.AggregateId,
+            aggregateVersion = envelope.AggregateVersion,
             type = evt.GetType().Name.Replace("Event", ""),
-            payload = evt
+            payload = JsonSerializer.SerializeToElement(evt, evt.GetType()),
+            timestamp = DateTimeOffset.UtcNow,
+            source = 1,
+            state = 1
         });
     }
 }

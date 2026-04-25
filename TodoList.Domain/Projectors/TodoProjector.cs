@@ -22,12 +22,12 @@ public static class TodoProjector
             {
                 case "TodoSeeded":
                     if (evt.Payload is { } seedPayload)
-                        state[id] = ProjectSeed(id, seedPayload);
+                        state[id] = ProjectSeed(id, seedPayload) with { Version = evt.AggregateVersion };
                     break;
 
                 case "TodoCreated":
                     if (evt.Payload is { } createdPayload)
-                        state[id] = ProjectCreated(id, createdPayload);
+                        state[id] = ProjectCreated(id, createdPayload) with { Version = evt.AggregateVersion };
                     break;
 
                 case "TodoCompleted":
@@ -96,6 +96,12 @@ public static class TodoProjector
                     }
                     break;
             }
+
+            // Stamp the latest aggregate version onto the projected summary so callers
+            // (CommandDispatcher) carry the correct ExpectedVersion. The seed event's
+            // AggregateVersion comes from the server's GET /todos response.
+            if (state.TryGetValue(id, out var current) && evt.AggregateVersion > current.Version)
+                state[id] = current with { Version = evt.AggregateVersion };
         }
 
         return state.Values.ToList();

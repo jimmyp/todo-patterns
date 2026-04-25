@@ -15,7 +15,7 @@ public static class CategoryCommandHandlers
 {
     public static async Task<object[]> Handle(AddCategoryCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
     {
-        var cascaded = new List<object>();
+        var seedEvts = new List<IDomainEvent>();
         var list = await repo.GetByUserIdAsync(cmd.UserId);
         if (list is null)
         {
@@ -24,7 +24,7 @@ public static class CategoryCommandHandlers
             var (newList, seedEvents) = CategoryList.Create(cmd.UserId);
             await repo.AddAsync(newList);
             list = newList;
-            cascaded.AddRange(seedEvents.Select(e => (object)e));
+            seedEvts.AddRange(seedEvents);
         }
         else if (cmd.ExpectedVersion > 0 && list.Version != cmd.ExpectedVersion)
         {
@@ -37,8 +37,8 @@ public static class CategoryCommandHandlers
 
         await repo.SaveAsync();
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = result.Value!.CategoryId }));
-        cascaded.Add(result.Value!);
-        return cascaded.ToArray();
+        seedEvts.Add(result.Value!);
+        return WrapEvents(seedEvts, cmd.UserId, list.Version);
     }
 
     public static async Task<object[]> Handle(RenameCategoryCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
@@ -56,7 +56,7 @@ public static class CategoryCommandHandlers
 
         await repo.SaveAsync();
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
-        return [result.Value!];
+        return WrapEvents([result.Value!], cmd.UserId, list.Version);
     }
 
     public static async Task<object[]> Handle(ChangeCategoryColorCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
@@ -74,7 +74,7 @@ public static class CategoryCommandHandlers
 
         await repo.SaveAsync();
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
-        return [result.Value!];
+        return WrapEvents([result.Value!], cmd.UserId, list.Version);
     }
 
     public static async Task<object[]> Handle(ChangeCategoryIconCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
@@ -92,7 +92,7 @@ public static class CategoryCommandHandlers
 
         await repo.SaveAsync();
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
-        return [result.Value!];
+        return WrapEvents([result.Value!], cmd.UserId, list.Version);
     }
 
     public static async Task<object[]> Handle(ReorderCategoryCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
@@ -110,7 +110,7 @@ public static class CategoryCommandHandlers
 
         await repo.SaveAsync();
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
-        return [result.Value!];
+        return WrapEvents([result.Value!], cmd.UserId, list.Version);
     }
 
     public static async Task<object[]> Handle(RemoveCategoryCommand cmd, ICategoryListRepository repo, IOperationRepository ops)
@@ -128,8 +128,18 @@ public static class CategoryCommandHandlers
 
         await repo.SaveAsync();
         await CompleteOperation(ops, cmd.OperationId, JsonSerializer.Serialize(new { id = cmd.CategoryId }));
-        return [result.Value!];
+        return WrapEvents([result.Value!], cmd.UserId, list.Version);
     }
+
+    /// <summary>
+    /// CategoryList is a single per-user aggregate. We use the synthetic aggregate id
+    /// "user-category-list" on the wire (SignalR groups are already per-user, so we don't
+    /// need userId in the id). Must match the client's CategoryListAggregateId constant.
+    /// </summary>
+    public const string CategoryListAggregateId = "user-category-list";
+
+    private static object[] WrapEvents(IReadOnlyList<IDomainEvent> events, string userId, int aggregateVersion) =>
+        events.Select(e => (object)new UserScopedEvent(userId, CategoryListAggregateId, aggregateVersion, e)).ToArray();
 
     private static async Task CompleteOperation(IOperationRepository ops, Guid operationId, string resultJson)
     {
@@ -143,20 +153,21 @@ public static class CategoryCommandHandlers
         }
     }
 
-    private static async Task FailOperation(IOperationRepository ops, Guid operationId, string error)
+    private static async Task FailOperation(IOperationRepository ops, Guid operationId, string error, string code = FailureCodes.NotFound)
     {
         var op = await ops.GetByIdAsync(operationId);
         if (op is not null)
         {
             op.Status = "failed";
             op.FailureReason = error;
+            op.FailureCode = code;
             op.CompletedAt = DateTimeOffset.UtcNow;
             await ops.SaveAsync();
         }
     }
 
     private static async Task FailOperation(IOperationRepository ops, Guid operationId, string[] errors) =>
-        await FailOperation(ops, operationId, string.Join("; ", errors));
+        await FailOperation(ops, operationId, string.Join("; ", errors), FailureCodes.ValidationError);
 
     private static async Task ConflictOperation(IOperationRepository ops, Guid operationId, int serverVersion)
     {
@@ -165,6 +176,7 @@ public static class CategoryCommandHandlers
         {
             op.Status = "failed";
             op.FailureReason = $"Version conflict: expected version does not match server version {serverVersion}";
+            op.FailureCode = FailureCodes.VersionConflict;
             op.CompletedAt = DateTimeOffset.UtcNow;
             await ops.SaveAsync();
         }

@@ -30,6 +30,7 @@ public class TodoDbContext(DbContextOptions<TodoDbContext> options) : DbContext(
             b.HasKey(o => o.Id);
             b.Property(o => o.Status).HasMaxLength(20).IsRequired();
             b.Property(o => o.FailureReason).HasMaxLength(2000);
+            b.Property(o => o.FailureCode).HasMaxLength(50);
         });
 
         modelBuilder.Entity<CategoryListEntity>(b =>

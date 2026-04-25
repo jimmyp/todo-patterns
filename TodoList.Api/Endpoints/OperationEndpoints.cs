@@ -25,6 +25,7 @@ public static class OperationEndpoints
                 status        = operation.Status,
                 result,
                 failureReason = operation.FailureReason,
+                failureCode   = operation.FailureCode,
                 isRetryable   = operation.IsRetryable,
                 createdAt     = operation.CreatedAt,
                 completedAt   = operation.CompletedAt

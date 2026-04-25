@@ -6,34 +6,54 @@
 
 ---
 
-## 1. Optimistic Concurrency (end-to-end)
+## 1. Optimistic Concurrency (end-to-end, async)
+
+The mutation pipeline is async: every mutating endpoint accepts the request, enqueues a Wolverine command, and returns 202 + a Location header pointing at the operation resource. The concurrency check happens *inside* the command handler, not at the endpoint, so conflicts surface on the operation poll — not as a synchronous 409.
 
 ### Server
 
-Every mutating endpoint in `TodoEndpoints.cs` and `CategoryEndpoints.cs` reads the `X-Expected-Version` request header. After loading the aggregate, the handler compares the header value against the aggregate's current `Version`. If they don't match, the endpoint returns:
+Every mutating endpoint reads `X-Expected-Version` from the request header and forwards it on the command (`ExpectedVersion`). The endpoint always returns:
 
 ```
-409 Conflict
+202 Accepted
+Location: /todos/operations/{operationId}
+{ "operationId": "...", "retryAfterMs": 200 }
+```
+
+The Wolverine command handler loads the aggregate, compares `cmd.ExpectedVersion` to `aggregate.Version`, and on mismatch marks the operation `Status = "failed"` with:
+
+```
+FailureCode = "VERSION_CONFLICT"
+FailureReason = "Version conflict: expected version does not match server version {N}"
+```
+
+The client polls `GET /todos/operations/{id}` and sees:
+
+```json
 {
-  "commandId": "<from request>",
-  "aggregateId": "<aggregate ID>",
-  "serverEvents": [{ "id", "aggregateId", "aggregateVersion", "type", "payload", "timestamp" }]
+  "id": "...",
+  "status": "failed",
+  "failureCode": "VERSION_CONFLICT",
+  "failureReason": "Version conflict: expected version does not match server version 7",
+  ...
 }
 ```
 
-The `serverEvents` array contains all events since the client's expected version, fetched from the event/projection store.
+The reconciliation events arrive separately via SignalR push (same as any other server-side mutation) — the client's `EventHubClient` calls `ReplaceSpeculative` on the affected aggregate, which clears the failed optimistic write and applies the authoritative state.
+
+`FailureCode` is a known string constant: `VERSION_CONFLICT`, `VALIDATION_ERROR`, `NOT_FOUND`, or `INTERNAL_ERROR`. The client branches on this value — no substring matching of `FailureReason`.
 
 Both `Todo` and `CategoryList` aggregates already track `Version`.
 
 ### Client
 
-`CommandDispatcher` already sends `X-Expected-Version` and handles 409/422 responses. The fix is ensuring `ExpectedVersion` on dispatched commands reflects the actual aggregate version from the read model, not the hardcoded `0` currently used in all pages.
+`CommandDispatcher` sends `X-Expected-Version` on every command. After receiving 202, it polls the operation resource via `OperationPoller`. On a `failed` terminal state with `FailureCode = "VERSION_CONFLICT"`, it calls `_store.DiscardSpeculative(aggregateId)` and `_store.MarkSynced(commandId)`, then surfaces a snackbar warning. The SignalR push delivering the authoritative server events triggers `ReplaceSpeculative`, reconciling the local store.
 
-`TodoSummary` and `CategorySummary` must carry a `Version` field so pages can pass it to commands.
+`ExpectedVersion` on dispatched commands reflects the actual aggregate version from the read model (`TodoSummary.Version` for todos, `CategoryListSummary.Version` for category mutations) — not the hardcoded `0` previously used in pages.
 
 ### Verification
 
-Integration test: two concurrent mutations to the same aggregate — second gets 409 with server events in the response body.
+Integration test: two concurrent mutations to the same aggregate. The second mutation's operation poll returns `status = "failed"` with `failureCode = "VERSION_CONFLICT"`. Subsequent SignalR push for the first mutation arrives and the client's store reconciles via `ReplaceSpeculative`.
 
 ---
 
