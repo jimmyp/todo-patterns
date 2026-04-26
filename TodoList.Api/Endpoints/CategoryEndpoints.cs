@@ -124,7 +124,7 @@ public static class CategoryEndpoints
     {
         var operationId = Guid.NewGuid();
         var expectedVersion = GetExpectedVersion(ctx);
-        await ops.AddAsync(new TodoOperation { Id = operationId, Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
+        await ops.AddAsync(new TodoOperation { Id = operationId, UserId = GetUserId(ctx), Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
         await ops.SaveAsync();
         return (operationId, expectedVersion);
     }

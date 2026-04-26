@@ -3,6 +3,12 @@ namespace TodoList.Api.Operations;
 public class TodoOperation
 {
     public Guid Id { get; set; }
+    /// <summary>
+    /// Caller who initiated the operation. The GET /todos/operations/{id} endpoint
+    /// 404s when this doesn't match the authenticated user's id, so operation IDs
+    /// are not a side channel for cross-user data.
+    /// </summary>
+    public string UserId { get; set; } = "";
     public string Status { get; set; } = "pending";  // pending | processing | complete | failed
     public string? ResultJson { get; set; }
     public string? FailureReason { get; set; }

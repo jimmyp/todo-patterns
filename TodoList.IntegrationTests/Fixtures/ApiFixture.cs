@@ -137,12 +137,19 @@ public class ApiFixture : IAsyncLifetime
     /// <summary>
     /// Polls an operation until it reaches a terminal state (complete/failed).
     /// Wolverine handlers run async — the operation starts as "processing".
+    /// Pass <paramref name="userId"/> when the operation was created by a non-default
+    /// user — the GET endpoint scopes operations to the caller (S1) so polling without
+    /// the correct user header would 404.
     /// </summary>
-    public async Task<JsonElement> PollOperationAsync(Guid operationId, int maxAttempts = 20, int delayMs = 100)
+    public async Task<JsonElement> PollOperationAsync(Guid operationId, int maxAttempts = 20, int delayMs = 100, string? userId = null)
     {
         for (var i = 0; i < maxAttempts; i++)
         {
-            var op = await Client.GetFromJsonAsync<JsonElement>($"/todos/operations/{operationId}");
+            var req = new HttpRequestMessage(HttpMethod.Get, $"/todos/operations/{operationId}");
+            if (userId is not null) req.Headers.Add(TestAuthHandler.UserHeader, userId);
+            var response = await Client.SendAsync(req);
+            response.EnsureSuccessStatusCode();
+            var op = await response.Content.ReadFromJsonAsync<JsonElement>();
             var status = op.GetProperty("status").GetString();
             if (status is "complete" or "failed")
                 return op;

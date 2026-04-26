@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using TodoList.Api.Data;
 
@@ -10,10 +11,14 @@ public static class OperationEndpoints
         app.MapGet("/todos/operations/{id:guid}", async (
             Guid id,
             IOperationRepository ops,
+            HttpContext ctx,
             CancellationToken ct) =>
         {
             var operation = await ops.GetByIdAsync(id, ct);
-            if (operation is null) return Results.NotFound();
+            // 404 (not 403) when the caller doesn't own the operation — operation IDs
+            // are not a side channel for cross-user existence checks.
+            var callerId = ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
+            if (operation is null || operation.UserId != callerId) return Results.NotFound();
 
             JsonElement? result = operation.ResultJson is not null
                 ? JsonSerializer.Deserialize<JsonElement>(operation.ResultJson)

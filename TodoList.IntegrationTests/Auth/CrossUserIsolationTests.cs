@@ -27,7 +27,7 @@ public class CrossUserIsolationTests(ApiFixture fixture) : IClassFixture<ApiFixt
         var postResponse = await fixture.Client.SendAsync(postA);
         postResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var accepted = await postResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
-        await fixture.PollOperationAsync(accepted!.OperationId);
+        await fixture.PollOperationAsync(accepted!.OperationId, userId: UserA);
 
         // User A sees their todo (projection is async — poll until it lands)
         JsonElement[] todosA = [];
@@ -67,7 +67,7 @@ public class CrossUserIsolationTests(ApiFixture fixture) : IClassFixture<ApiFixt
         var postResponse = await fixture.Client.SendAsync(postA);
         postResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var accepted = await postResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
-        await fixture.PollOperationAsync(accepted!.OperationId);
+        await fixture.PollOperationAsync(accepted!.OperationId, userId: UserA);
 
         // User B triggers their own auto-seed (fresh CategoryList)
         var getB = new HttpRequestMessage(HttpMethod.Get, "/categories");
@@ -82,5 +82,32 @@ public class CrossUserIsolationTests(ApiFixture fixture) : IClassFixture<ApiFixt
         namesB.Should().NotContain(customName);
         // But they should see the default seeds
         namesB.Should().Contain("Personal");
+    }
+
+    [Fact]
+    public async Task User_cannot_poll_another_users_operation()
+    {
+        // User A creates a todo — captures their operation id
+        var postA = new HttpRequestMessage(HttpMethod.Post, "/todos")
+        {
+            Content = JsonContent.Create(new { title = $"isolated-op-{Guid.NewGuid()}" })
+        };
+        postA.Headers.Add(TestAuthHandler.UserHeader, UserA);
+        var postResponse = await fixture.Client.SendAsync(postA);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var accepted = await postResponse.Content.ReadFromJsonAsync<OperationAcceptedResponse>();
+
+        // User A can poll their own operation
+        var pollA = new HttpRequestMessage(HttpMethod.Get, $"/todos/operations/{accepted!.OperationId}");
+        pollA.Headers.Add(TestAuthHandler.UserHeader, UserA);
+        var responseA = await fixture.Client.SendAsync(pollA);
+        responseA.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // User B must NOT be able to poll user A's operation — 404, not 403, so the
+        // response shape doesn't reveal whether the operation id exists.
+        var pollB = new HttpRequestMessage(HttpMethod.Get, $"/todos/operations/{accepted.OperationId}");
+        pollB.Headers.Add(TestAuthHandler.UserHeader, UserB);
+        var responseB = await fixture.Client.SendAsync(pollB);
+        responseB.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

@@ -45,7 +45,7 @@ public static class TodoEndpoints
         {
             var userId = GetUserId(ctx);
             var operationId = Guid.NewGuid();
-            await ops.AddAsync(new TodoOperation { Id = operationId, Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
+            await ops.AddAsync(new TodoOperation { Id = operationId, UserId = userId, Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
             await ops.SaveAsync();
 
             await bus.PublishAsync(new CreateTodoCommand(
@@ -139,7 +139,7 @@ public static class TodoEndpoints
     {
         var operationId = Guid.NewGuid();
         var expectedVersion = GetExpectedVersion(ctx);
-        await ops.AddAsync(new TodoOperation { Id = operationId, Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
+        await ops.AddAsync(new TodoOperation { Id = operationId, UserId = GetUserId(ctx), Status = "processing", CreatedAt = DateTimeOffset.UtcNow });
         await ops.SaveAsync();
         return (operationId, expectedVersion);
     }
