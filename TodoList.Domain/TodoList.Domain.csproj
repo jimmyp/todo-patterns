@@ -6,4 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Domain references WolverineFx solely for the marker attribute [SagaIdentity]
+         on saga-initiating events. The saga itself lives in the Api project. -->
+    <PackageReference Include="WolverineFx" Version="4.0.0" />
+  </ItemGroup>
+
 </Project>

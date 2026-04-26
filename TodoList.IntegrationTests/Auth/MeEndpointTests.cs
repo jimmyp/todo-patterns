@@ -5,7 +5,8 @@ using TodoList.IntegrationTests.Fixtures;
 
 namespace TodoList.IntegrationTests.Auth;
 
-public class MeEndpointTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+[Collection(ApiCollection.Name)]
+public class MeEndpointTests(ApiFixture fixture)
 {
     [Fact]
     public async Task GetMe_ReturnsTestUser()

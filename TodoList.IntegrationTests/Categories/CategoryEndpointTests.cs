@@ -3,7 +3,8 @@ using TodoList.Domain.ReadModels;
 
 namespace TodoList.IntegrationTests.Categories;
 
-public class CategoryEndpointTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+[Collection(ApiCollection.Name)]
+public class CategoryEndpointTests(ApiFixture fixture)
 {
     [Fact]
     public async Task GetCategories_returns_seeded_categories_for_new_user()

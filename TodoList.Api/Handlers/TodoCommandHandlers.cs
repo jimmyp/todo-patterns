@@ -183,12 +183,14 @@ public static class TodoCommandHandlers
         return WrapEvents(result.Value!, cmd.UserId, todo.Id, todo.Version);
     }
 
-    // Wolverine cascades: wrap domain events with UserId, the aggregate id, and the
-    // aggregate's post-mutation version. The projection handler uses the version when
-    // pushing the authoritative event over SignalR so the client can advance ListVersion
-    // and replace its speculative entry.
+    // Wolverine cascades both the wrapper (for projection + SignalR push, which need
+    // userId/aggregateId/version context) and the bare inner event (so handlers like
+    // DueReminderSaga.Start(TodoDueDateSetEvent) can subscribe to the domain type
+    // directly without unpacking the envelope).
     private static object[] WrapEvents(IReadOnlyList<IDomainEvent> events, string userId, Guid aggregateId, int aggregateVersion) =>
-        events.Select(e => (object)new UserScopedEvent(userId, aggregateId.ToString(), aggregateVersion, e)).ToArray();
+        events
+            .SelectMany(e => new object[] { new UserScopedEvent(userId, aggregateId.ToString(), aggregateVersion, e), e })
+            .ToArray();
 
     private static async Task CompleteOperation(IOperationRepository ops, Guid operationId, string resultJson)
     {

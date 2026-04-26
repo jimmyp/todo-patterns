@@ -3,7 +3,8 @@ using System.Net;
 namespace TodoList.IntegrationTests.Api;
 
 [Trait("Category", "Integration")]
-public class HealthEndpointsTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+[Collection(ApiCollection.Name)]
+public class HealthEndpointsTests(ApiFixture fixture)
 {
     [Fact]
     public async Task LivenessEndpoint_returns_200()

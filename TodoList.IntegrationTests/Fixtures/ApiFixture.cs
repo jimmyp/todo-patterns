@@ -85,6 +85,10 @@ public class ApiFixture : IAsyncLifetime
     private WebApplicationFactory<ApiProgram>? _factory;
     public HttpClient Client { get; private set; } = null!;
 
+    /// <summary>Exposes the test host's service provider so tests can resolve
+    /// Wolverine's IMessageBus / IHost for saga + tracking assertions.</summary>
+    public IServiceProvider Services => _factory!.Services;
+
     public async Task InitializeAsync()
     {
         await _sql.StartAsync();

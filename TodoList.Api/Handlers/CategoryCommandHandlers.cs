@@ -131,8 +131,14 @@ public static class CategoryCommandHandlers
         return WrapEvents([result.Value!], cmd.UserId, list.Version);
     }
 
+    // Wolverine cascades both the wrapper (for projection + SignalR push, which need
+    // userId/aggregateId/version context) and the bare inner event so domain-event
+    // subscribers (sagas, future handlers) can take the domain type directly without
+    // unpacking the envelope.
     private static object[] WrapEvents(IReadOnlyList<IDomainEvent> events, string userId, int aggregateVersion) =>
-        events.Select(e => (object)new UserScopedEvent(userId, AggregateIds.CategoryList, aggregateVersion, e)).ToArray();
+        events
+            .SelectMany(e => new object[] { new UserScopedEvent(userId, AggregateIds.CategoryList, aggregateVersion, e), e })
+            .ToArray();
 
     private static async Task CompleteOperation(IOperationRepository ops, Guid operationId, string resultJson)
     {

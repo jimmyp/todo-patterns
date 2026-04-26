@@ -9,7 +9,8 @@ namespace TodoList.IntegrationTests.Auth;
 /// and categories don't leak into user B's GET responses.
 /// </summary>
 [Trait("Category", "Integration")]
-public class CrossUserIsolationTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+[Collection(ApiCollection.Name)]
+public class CrossUserIsolationTests(ApiFixture fixture)
 {
     private const string UserA = "user-a-iso";
     private const string UserB = "user-b-iso";

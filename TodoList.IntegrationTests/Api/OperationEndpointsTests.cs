@@ -3,7 +3,8 @@ using System.Net;
 namespace TodoList.IntegrationTests.Api;
 
 [Trait("Category", "Integration")]
-public class OperationEndpointsTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+[Collection(ApiCollection.Name)]
+public class OperationEndpointsTests(ApiFixture fixture)
 {
     [Fact]
     public async Task GetOperation_after_create_returns_complete_with_todo_id()

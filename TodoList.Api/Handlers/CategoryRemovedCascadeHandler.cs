@@ -32,7 +32,12 @@ public static class CategoryRemovedCascadeHandler
             // wrap the event. Each todo is its own aggregate.
             await repo.SaveAsync();
             foreach (var domainEvt in result.Value!)
+            {
+                // Cascade both: wrapper carries aggregate context for projection/SignalR;
+                // bare inner event lets sagas subscribe to the domain type directly.
                 cascadedEvents.Add(new UserScopedEvent(envelope.UserId, todo.Id.ToString(), todo.Version, domainEvt));
+                cascadedEvents.Add(domainEvt);
+            }
         }
 
         return cascadedEvents.ToArray();

@@ -3,7 +3,8 @@ using System.Net;
 namespace TodoList.IntegrationTests.Api;
 
 [Trait("Category", "Integration")]
-public class TodoEndpointsTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+[Collection(ApiCollection.Name)]
+public class TodoEndpointsTests(ApiFixture fixture)
 {
     [Fact]
     public async Task GetTodos_returns_json_array()

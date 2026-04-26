@@ -2,7 +2,8 @@ using System.Net;
 
 namespace TodoList.IntegrationTests.Todos;
 
-public class TodoExtendedEndpointTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+[Collection(ApiCollection.Name)]
+public class TodoExtendedEndpointTests(ApiFixture fixture)
 {
     [Fact]
     public async Task PostTodo_creates_summary_readable_via_get()

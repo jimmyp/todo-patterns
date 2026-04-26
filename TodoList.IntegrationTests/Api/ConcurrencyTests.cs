@@ -3,7 +3,8 @@ using System.Net;
 namespace TodoList.IntegrationTests.Api;
 
 [Trait("Category", "Integration")]
-public class ConcurrencyTests(ApiFixture fixture) : IClassFixture<ApiFixture>
+[Collection(ApiCollection.Name)]
+public class ConcurrencyTests(ApiFixture fixture)
 {
     [Fact]
     public async Task Concurrent_mutations_with_stale_version_fails_operation()
