@@ -74,42 +74,42 @@ public static class CategoryEndpoints
         group.MapPost("/", async (AddCategoryRequest request, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.InvokeAsync(new AddCategoryCommand(request.Name, request.Color, request.Icon, GetUserId(ctx), operationId, expectedVersion));
+            await bus.PublishAsync(new AddCategoryCommand(request.Name, request.Color, request.Icon, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id}/rename", async (Guid id, RenameCategoryRequest request, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.InvokeAsync(new RenameCategoryCommand(id, request.Name, GetUserId(ctx), operationId, expectedVersion));
+            await bus.PublishAsync(new RenameCategoryCommand(id, request.Name, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id}/change-color", async (Guid id, ChangeCategoryColorRequest request, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.InvokeAsync(new ChangeCategoryColorCommand(id, request.Color, GetUserId(ctx), operationId, expectedVersion));
+            await bus.PublishAsync(new ChangeCategoryColorCommand(id, request.Color, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id}/change-icon", async (Guid id, ChangeCategoryIconRequest request, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.InvokeAsync(new ChangeCategoryIconCommand(id, request.Icon, GetUserId(ctx), operationId, expectedVersion));
+            await bus.PublishAsync(new ChangeCategoryIconCommand(id, request.Icon, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapPost("/{id}/reorder", async (Guid id, ReorderCategoryRequest request, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.InvokeAsync(new ReorderCategoryCommand(id, request.Order, GetUserId(ctx), operationId, expectedVersion));
+            await bus.PublishAsync(new ReorderCategoryCommand(id, request.Order, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
 
         group.MapDelete("/{id}", async (Guid id, IMessageBus bus, IOperationRepository ops, HttpContext ctx) =>
         {
             var (operationId, expectedVersion) = await CreateOperation(ops, ctx);
-            await bus.InvokeAsync(new RemoveCategoryCommand(id, GetUserId(ctx), operationId, expectedVersion));
+            await bus.PublishAsync(new RemoveCategoryCommand(id, GetUserId(ctx), operationId, expectedVersion));
             return Accepted(ctx, operationId);
         });
     }

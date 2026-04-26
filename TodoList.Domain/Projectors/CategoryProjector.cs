@@ -18,7 +18,14 @@ public static class CategoryProjector
     public static CategoryListSummary ProjectList(IReadOnlyList<DomainEventEnvelope> events)
     {
         var categories = ProjectAll(events);
-        var version = events.Count > 0 ? events.Max(e => e.AggregateVersion) : 0;
+        // Version is per-aggregate. Callers may pass mixed event streams (todos + the
+        // single CategoryList aggregate from the same client store); take the max
+        // only across the CategoryList aggregate so we don't read a phantom version
+        // from unrelated todo events.
+        var version = events
+            .Where(e => e.AggregateId == AggregateIds.CategoryList)
+            .Select(e => (int?)e.AggregateVersion)
+            .Max() ?? 0;
         return new CategoryListSummary { Version = version, Categories = categories };
     }
 

@@ -1,6 +1,7 @@
 @* TodoList.Web/Client/Pages/Categories.razor *@
 @page "/categories"
 @using System.Text.Json
+@using TodoList.Domain
 @using TodoList.Domain.ReadModels
 @using TodoList.Web.Client.Store
 @inject ILocalCategoryStore CategoryStore
@@ -54,8 +55,6 @@
 
 @code {
     private bool _newCardHover;
-    // CategoryList aggregate uses a fixed ID — in a real app this would be the user's ID
-    private const string CategoryListAggregateId = "user-category-list";
 
     protected override void OnInitialized() => CategoryStore.OnChange += StateHasChanged;
 
@@ -71,7 +70,7 @@
         {
             var command = new ClientCommand
             {
-                AggregateId = CategoryListAggregateId,
+                AggregateId = AggregateIds.CategoryList,
                 ExpectedVersion = CategoryStore.ListVersion,
                 Type = nameof(TodoList.Domain.Commands.AddCategoryCommand),
                 Payload = JsonSerializer.SerializeToElement(new { name = data.Name, color = data.Color, icon = data.Icon }),
@@ -80,7 +79,7 @@
             };
             var speculativeEvent = new ClientEvent
             {
-                AggregateId = CategoryListAggregateId,
+                AggregateId = AggregateIds.CategoryList,
                 AggregateVersion = CategoryStore.ListVersion + 1,
                 Type = "CategoryAdded",
                 Payload = JsonSerializer.SerializeToElement(new { name = data.Name, color = data.Color, icon = data.Icon }),
@@ -107,7 +106,7 @@
         {
             var command = new ClientCommand
             {
-                AggregateId = CategoryListAggregateId,
+                AggregateId = AggregateIds.CategoryList,
                 ExpectedVersion = CategoryStore.ListVersion,
                 Type = nameof(TodoList.Domain.Commands.RenameCategoryCommand),
                 Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id, newName = data.Name }),
@@ -116,7 +115,7 @@
             };
             var speculativeEvent = new ClientEvent
             {
-                AggregateId = CategoryListAggregateId,
+                AggregateId = AggregateIds.CategoryList,
                 AggregateVersion = CategoryStore.ListVersion + 1,
                 Type = "CategoryRenamed",
                 Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id, newName = data.Name }),
@@ -132,7 +131,7 @@
     {
         var command = new ClientCommand
         {
-            AggregateId = CategoryListAggregateId,
+            AggregateId = AggregateIds.CategoryList,
             ExpectedVersion = CategoryStore.ListVersion,
             Type = nameof(TodoList.Domain.Commands.RemoveCategoryCommand),
             Payload = null,
@@ -142,7 +141,7 @@
         };
         var speculativeEvent = new ClientEvent
         {
-            AggregateId = CategoryListAggregateId,
+            AggregateId = AggregateIds.CategoryList,
             AggregateVersion = CategoryStore.ListVersion + 1,
             Type = "CategoryRemoved",
             Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id }),

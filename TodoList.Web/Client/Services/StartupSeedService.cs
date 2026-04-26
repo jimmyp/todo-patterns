@@ -1,6 +1,7 @@
 // TodoList.Web/Client/Services/StartupSeedService.cs
 using System.Net.Http.Json;
 using System.Text.Json;
+using TodoList.Domain;
 using TodoList.Web.Client.Store;
 
 namespace TodoList.Web.Client.Services;
@@ -87,7 +88,7 @@ public class StartupSeedService
             var evt = new ClientEvent
             {
                 Id = Guid.NewGuid().ToString(),
-                AggregateId = "user-category-list",
+                AggregateId = AggregateIds.CategoryList,
                 AggregateVersion = listVersion,
                 Type = "CategorySeeded",
                 Payload = cat,

@@ -131,15 +131,8 @@ public static class CategoryCommandHandlers
         return WrapEvents([result.Value!], cmd.UserId, list.Version);
     }
 
-    /// <summary>
-    /// CategoryList is a single per-user aggregate. We use the synthetic aggregate id
-    /// "user-category-list" on the wire (SignalR groups are already per-user, so we don't
-    /// need userId in the id). Must match the client's CategoryListAggregateId constant.
-    /// </summary>
-    public const string CategoryListAggregateId = "user-category-list";
-
     private static object[] WrapEvents(IReadOnlyList<IDomainEvent> events, string userId, int aggregateVersion) =>
-        events.Select(e => (object)new UserScopedEvent(userId, CategoryListAggregateId, aggregateVersion, e)).ToArray();
+        events.Select(e => (object)new UserScopedEvent(userId, AggregateIds.CategoryList, aggregateVersion, e)).ToArray();
 
     private static async Task CompleteOperation(IOperationRepository ops, Guid operationId, string resultJson)
     {

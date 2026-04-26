@@ -41,11 +41,11 @@ public class OperationPoller
                         _ => OperationResult.Failed($"Unknown status: {body.Status}", null)
                     };
                     if (terminal is not null) return terminal;
+                    // Non-terminal: fall through to the delay-and-retry tail.
                 }
-
-                if ((int)response.StatusCode >= 500)
+                else if ((int)response.StatusCode >= 500)
                 {
-                    // Transient — retry
+                    // Transient — fall through to retry
                 }
                 else
                 {
