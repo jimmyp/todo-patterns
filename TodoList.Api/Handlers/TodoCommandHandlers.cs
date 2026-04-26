@@ -235,14 +235,6 @@ public static class TodoCommandHandlers
     }
 }
 
-public static class FailureCodes
-{
-    public const string VersionConflict = "VERSION_CONFLICT";
-    public const string ValidationError = "VALIDATION_ERROR";
-    public const string NotFound = "NOT_FOUND";
-    public const string InternalError = "INTERNAL_ERROR";
-}
-
 /// <summary>
 /// Wraps a domain event with the context the projection + push pipeline needs:
 /// who the user is, which aggregate the event belongs to, and what the aggregate's

@@ -84,12 +84,3 @@ public record OperationResult
     public static OperationResult Failed(string reason, string? code = null) =>
         new() { IsSuccess = false, FailureReason = reason, FailureCode = code };
 }
-
-/// <summary>Known FailureCode values returned by the API.</summary>
-public static class FailureCodes
-{
-    public const string VersionConflict = "VERSION_CONFLICT";
-    public const string ValidationError = "VALIDATION_ERROR";
-    public const string NotFound = "NOT_FOUND";
-    public const string InternalError = "INTERNAL_ERROR";
-}
