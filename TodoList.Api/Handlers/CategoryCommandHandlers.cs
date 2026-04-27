@@ -135,6 +135,11 @@ public static class CategoryCommandHandlers
     // userId/aggregateId/version context) and the bare inner event so domain-event
     // subscribers (sagas, future handlers) can take the domain type directly without
     // unpacking the envelope.
+    //
+    // Footgun: any handler with signature Handle(TXxxEvent) WILL fire alongside any
+    // Handle(UserScopedEvent) handler — by design. If you add new projection or
+    // cascade work, pick ONE shape: take UserScopedEvent if you need user/version
+    // context, take the bare event if you don't.
     private static object[] WrapEvents(IReadOnlyList<IDomainEvent> events, string userId, int aggregateVersion) =>
         events
             .SelectMany(e => new object[] { new UserScopedEvent(userId, AggregateIds.CategoryList, aggregateVersion, e), e })

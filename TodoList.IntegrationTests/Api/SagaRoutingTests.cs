@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using TodoList.Api.Sagas;
 using TodoList.Domain.Events;
 using Wolverine;
 using Wolverine.Tracking;
@@ -20,19 +21,27 @@ public class SagaRoutingTests(ApiFixture fixture)
     public async Task Bare_TodoDueDateSetEvent_reaches_DueReminderSaga()
     {
         var host = fixture.Services.GetRequiredService<IHost>();
-        var evt = new TodoDueDateSetEvent(Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(7), "saga-test-user");
 
-        // TrackActivity waits until all cascading work is complete and records every
-        // message processed. We assert that the bare event was routed (Saga.Start
-        // is what consumes it) — proving B2's "bare inner event also published" fix.
+        // Due date in the past — Saga.Start clamps a negative delay to zero, so the
+        // cascading DueReminderMessage executes inline rather than being scheduled
+        // hours/days out (the realistic case). Lets us observe the saga firing
+        // synchronously in the tracking session.
+        var evt = new TodoDueDateSetEvent(Guid.NewGuid(), DateTimeOffset.UtcNow.AddSeconds(-1), "saga-test-user");
+
+        // Assert on the saga's CASCADING output (DueReminderMessage) rather than the
+        // input event — Executed includes the published event itself, so asserting
+        // MessagesOf<TodoDueDateSetEvent>() would pass even if no handler consumed it.
+        // DueReminderMessage is only emitted by DueReminderSaga.Start, which proves
+        // B2's "bare inner event reaches the saga" fix.
         var session = await host.TrackActivity()
             .IncludeExternalTransports()
             .Timeout(TimeSpan.FromSeconds(10))
             .PublishMessageAndWaitAsync(evt);
 
-        var executed = session.Executed.MessagesOf<TodoDueDateSetEvent>().ToList();
-        executed.Should().NotBeEmpty(
-            "DueReminderSaga.Start subscribes to TodoDueDateSetEvent — if Wolverine never " +
-            "executes it as a bare message, the saga never fires.");
+        var reminders = session.Executed.MessagesOf<DueReminderMessage>().ToList();
+        reminders.Should().NotBeEmpty(
+            "DueReminderSaga.Start emits a DueReminderMessage when it receives " +
+            "TodoDueDateSetEvent. If the bare event never reaches the saga, no reminder " +
+            "is cascaded and this list is empty.");
     }
 }
