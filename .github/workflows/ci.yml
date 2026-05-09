@@ -1,0 +1,109 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Unit tests — fast, no Docker required
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore TodoList.Tests/TodoList.Tests.csproj
+
+      - name: Build
+        run: dotnet build TodoList.Tests/TodoList.Tests.csproj --no-restore -c Release
+
+      - name: Run unit tests
+        run: |
+          dotnet test TodoList.Tests/TodoList.Tests.csproj \
+            --no-build \
+            -c Release \
+            --logger "trx;LogFileName=unit-tests.trx" \
+            --results-directory ./TestResults
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Unit Tests
+          path: TestResults/unit-tests.trx
+          reporter: dotnet-trx
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Build solution — verify all projects compile
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Solution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore solution
+        run: dotnet restore TodoList.sln
+
+      - name: Build solution
+        run: dotnet build TodoList.sln --no-restore -c Release
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Integration tests — requires Docker for Testcontainers SQL Server
+  # ---------------------------------------------------------------------------
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore TodoList.IntegrationTests/TodoList.IntegrationTests.csproj
+
+      - name: Build
+        run: dotnet build TodoList.IntegrationTests/TodoList.IntegrationTests.csproj --no-restore -c Release
+
+      - name: Run integration tests
+        run: |
+          dotnet test TodoList.IntegrationTests/TodoList.IntegrationTests.csproj \
+            --no-build \
+            -c Release \
+            --logger "trx;LogFileName=integration-tests.trx" \
+            --results-directory ./TestResults
+        env:
+          # Testcontainers needs Docker — available on ubuntu-latest
+          DOTNET_ENVIRONMENT: Testing
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Integration Tests
+          path: TestResults/integration-tests.trx
+          reporter: dotnet-trx

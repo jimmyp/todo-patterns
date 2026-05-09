@@ -1,0 +1,24 @@
+@* TodoList.Web/Client/Components/ConnectivityBanner.razor *@
+
+@if (Show)
+{
+    <MudAlert Severity="Severity.Error"
+              Variant="Variant.Filled"
+              Style="border-radius:var(--radius);margin-bottom:1rem;"
+              ShowCloseIcon="false">
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+            <span>Some changes couldn't sync.</span>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Inherit"
+                       Size="Size.Small"
+                       OnClick="OnRetry">
+                Retry
+            </MudButton>
+        </div>
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+}

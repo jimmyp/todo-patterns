@@ -1,0 +1,248 @@
+@* TodoList.Web/Client/Pages/TodoList.razor *@
+@page "/"
+@using System.Text.Json
+@using TodoList.Domain.ReadModels
+@using TodoList.Web.Client.Store
+@inject ILocalTodoStore TodoStore
+@inject ILocalCategoryStore CategoryStore
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject CommandDispatcher Dispatcher
+@inject IClientStore ClientStore
+@implements IDisposable
+
+<PageTitle>Todo List</PageTitle>
+
+<ConnectivityBanner Show="false" />
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+    <MudText Typo="Typo.h5" Style="font-family:var(--font-heading);color:var(--text-main);font-weight:600;">
+        My Tasks
+    </MudText>
+    <MudText Typo="Typo.body2" Style="color:var(--text-muted);">
+        @_activeTodos.Count active · @_completedTodos.Count done
+    </MudText>
+</div>
+
+@* Active tasks section *@
+<MudPaper Elevation="0"
+          Style="background:var(--bg-surface);border-radius:var(--radius);margin-bottom:1rem;">
+    <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border);">
+        <MudText Typo="Typo.overline" Style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.65rem;letter-spacing:0.1em;">
+            ACTIVE TASKS (@_activeTodos.Count)
+        </MudText>
+    </div>
+    @if (_activeTodos.Count == 0)
+    {
+        <div style="padding:2rem;text-align:center;">
+            <MudText Typo="Typo.body2" Style="color:var(--text-muted);">
+                No active tasks. Add one below.
+            </MudText>
+        </div>
+    }
+    else
+    {
+        <MudList T="string" Padding="false">
+            @foreach (var todo in _activeTodos)
+            {
+                <TaskRow Todo="@todo"
+                         IsUnsynced="@ClientStore.HasUnsyncedCommand(todo.Id.ToString())"
+                         IsConflicted="@ClientStore.HasConflictedEvents(todo.Id.ToString())"
+                         OnCompletedChanged="@((completed) => HandleComplete(todo, completed))"
+                         OnDelete="@(() => HandleDelete(todo))"
+                         OnEdit="@(() => HandleEdit(todo))" />
+            }
+        </MudList>
+    }
+</MudPaper>
+
+@* Completed tasks section — collapsed by default *@
+@if (_completedTodos.Count > 0)
+{
+    <MudExpansionPanel Style="background:var(--bg-surface);border-radius:var(--radius);">
+        <TitleContent>
+            <MudText Typo="Typo.overline" Style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.65rem;letter-spacing:0.1em;">
+                COMPLETED (@_completedTodos.Count)
+            </MudText>
+        </TitleContent>
+        <ChildContent>
+            <MudList T="string" Padding="false">
+                @foreach (var todo in _completedTodos)
+                {
+                    <TaskRow Todo="@todo"
+                             IsUnsynced="false"
+                             IsConflicted="false"
+                             OnCompletedChanged="@((completed) => HandleComplete(todo, completed))"
+                             OnDelete="@(() => HandleDelete(todo))"
+                             OnEdit="@(() => HandleEdit(todo))" />
+                }
+            </MudList>
+        </ChildContent>
+    </MudExpansionPanel>
+}
+
+@* FAB — Add task *@
+<MudFab Color="Color.Primary"
+        StartIcon="@Icons.Material.Filled.Add"
+        Style="position:fixed;bottom:2rem;right:2rem;z-index:100;"
+        OnClick="OpenAddDialog" />
+
+@code {
+    private List<TodoSummary> _activeTodos = [];
+    private List<TodoSummary> _completedTodos = [];
+
+    protected override void OnInitialized()
+    {
+        TodoStore.OnChange += RefreshLists;
+        RefreshLists();
+    }
+
+    private void RefreshLists()
+    {
+        _activeTodos = TodoStore.Todos.Where(t => !t.IsCompleted)
+            .OrderBy(t => t.DueDate ?? DateTimeOffset.MaxValue)
+            .ThenBy(t => t.CreatedAt)
+            .ToList();
+        _completedTodos = TodoStore.Todos.Where(t => t.IsCompleted)
+            .OrderByDescending(t => t.CompletedAt)
+            .ToList();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var parameters = new DialogParameters<TaskDialog>
+        {
+            { x => x.IsEdit, false },
+            { x => x.Categories, CategoryStore.Categories }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<TaskDialog>("Add Task", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled && result.Data is TaskDialogResult data)
+        {
+            var newId = Guid.NewGuid().ToString();
+            var command = new ClientCommand
+            {
+                AggregateId = newId,
+                ExpectedVersion = 0,
+                Type = nameof(TodoList.Domain.Commands.CreateTodoCommand),
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    title = data.Title,
+                    categoryId = data.CategoryId,
+                    dueDate = data.DueDate,
+                    notes = data.Notes,
+                    progress = data.Progress
+                }),
+                ApiEndpoint = "/todos",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = newId,
+                AggregateVersion = 1,
+                Type = "TodoCreated",
+                Payload = JsonSerializer.SerializeToElement(new { id = newId, title = data.Title }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+    }
+
+    private async Task HandleEdit(TodoSummary todo)
+    {
+        var parameters = new DialogParameters<TaskDialog>
+        {
+            { x => x.IsEdit, true },
+            { x => x.InitialTitle, todo.Title },
+            { x => x.InitialCategoryId, todo.CategoryId?.ToString() },
+            { x => x.InitialDueDate, todo.DueDate?.DateTime },
+            { x => x.InitialProgress, todo.Progress },
+            { x => x.Categories, CategoryStore.Categories }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<TaskDialog>("Edit Task", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled && result.Data is TaskDialogResult data)
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = todo.Id.ToString(),
+                ExpectedVersion = todo.Version,
+                Type = nameof(TodoList.Domain.Commands.RenameTodoCommand),
+                Payload = JsonSerializer.SerializeToElement(new { newTitle = data.Title }),
+                ApiEndpoint = $"/todos/{todo.Id}/rename",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = todo.Id.ToString(),
+                AggregateVersion = todo.Version + 1,
+                Type = "TodoRenamed",
+                Payload = JsonSerializer.SerializeToElement(new { newTitle = data.Title }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+    }
+
+    private async Task HandleComplete(TodoSummary todo, bool completed)
+    {
+        var command = new ClientCommand
+        {
+            AggregateId = todo.Id.ToString(),
+            ExpectedVersion = todo.Version,
+            Type = completed
+                ? nameof(TodoList.Domain.Commands.CompleteTodoCommand)
+                : nameof(TodoList.Domain.Commands.UncompleteTodoCommand),
+            Payload = null,
+            ApiEndpoint = completed ? $"/todos/{todo.Id}/complete" : $"/todos/{todo.Id}/uncomplete",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = todo.Id.ToString(),
+            AggregateVersion = todo.Version + 1,
+            Type = completed ? "TodoCompleted" : "TodoUncompleted",
+            Payload = completed
+                ? JsonSerializer.SerializeToElement(new { completedAt = DateTimeOffset.UtcNow })
+                : (System.Text.Json.JsonElement?)null,
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
+    }
+
+    private async Task HandleDelete(TodoSummary todo)
+    {
+        var command = new ClientCommand
+        {
+            AggregateId = todo.Id.ToString(),
+            ExpectedVersion = todo.Version,
+            Type = nameof(TodoList.Domain.Commands.DeleteTodoCommand),
+            Payload = null,
+            ApiEndpoint = $"/todos/{todo.Id}",
+            HttpMethod = "DELETE",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = todo.Id.ToString(),
+            AggregateVersion = todo.Version + 1,
+            Type = "TodoDeleted",
+            Payload = null,
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
+    }
+
+    public void Dispose() => TodoStore.OnChange -= RefreshLists;
+}

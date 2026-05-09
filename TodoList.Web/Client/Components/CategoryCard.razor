@@ -1,0 +1,42 @@
+@* TodoList.Web/Client/Components/CategoryCard.razor *@
+@using TodoList.Domain.ReadModels
+
+<MudCard Style="@($"background:var(--bg-surface);border-radius:var(--radius);border-left:4px solid {Category.Color};cursor:pointer;transition:border-color var(--transition),background var(--transition);")"
+         @onmouseenter="() => IsHovered = true"
+         @onmouseleave="() => IsHovered = false"
+         @onclick="OnCardClick"
+         Class="@(IsHovered ? "category-card-hover" : "")">
+    <MudCardContent Style="padding:1rem;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:0.75rem;">
+                <span class="material-symbols-outlined" style="@($"color:{Category.Color};font-size:1.5rem;")">
+                    @Category.Icon
+                </span>
+                <div>
+                    <MudText Typo="Typo.body1" Style="color:var(--text-main);font-weight:500;">
+                        @Category.Name
+                    </MudText>
+                    <span class="font-mono" style="background:var(--bg-surface-hover);color:var(--text-muted);padding:1px 6px;border-radius:2px;font-size:0.65rem;">
+                        @Category.TodoCount TASKS
+                    </span>
+                </div>
+            </div>
+            @if (IsHovered)
+            {
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Style="color:var(--text-muted);">
+                    <MudMenuItem OnClick="OnEdit">Edit</MudMenuItem>
+                    <MudMenuItem OnClick="OnDelete" Style="color:var(--error);">Delete</MudMenuItem>
+                </MudMenu>
+            }
+        </div>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired] public CategorySummary Category { get; set; } = null!;
+    [Parameter] public EventCallback OnEdit { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public EventCallback OnCardClick { get; set; }
+
+    private bool IsHovered { get; set; }
+}

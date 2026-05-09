@@ -1,0 +1,25 @@
+step "deploy-to-azure-app-service" {
+    name = "Deploy to Azure App Service"
+
+    action {
+        action_type = "Octopus.AzureWebApp"
+        properties = {
+            Octopus.Action.Azure.UseChecksum = "False"
+            Octopus.Action.Azure.UseSwapSlot = "False"
+            Octopus.Action.EnabledFeatures = "Octopus.Features.JsonConfigurationVariables"
+            Octopus.Action.Package.DownloadOnTentacle = "False"
+            Octopus.Action.Package.FeedId = "octopus-server-built-in"
+            Octopus.Action.Package.PackageId = "TodoList"
+        }
+        worker_pool_variable = "WorkerPool"
+
+        # This assumes you have created an Azure Account in Octopus Infrastructure
+        environments = ["Production"]
+
+        properties = {
+             Octopus.Action.Azure.AccountId = "#{Azure.Account}"
+             Octopus.Action.Azure.ResourceGroupName = "#{Azure.ResourceGroup}"
+             Octopus.Action.Azure.WebAppName = "#{Azure.WebAppName}"
+        }
+    }
+}

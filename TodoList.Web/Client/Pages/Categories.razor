@@ -1,0 +1,156 @@
+@* TodoList.Web/Client/Pages/Categories.razor *@
+@page "/categories"
+@using System.Text.Json
+@using TodoList.Domain
+@using TodoList.Domain.ReadModels
+@using TodoList.Web.Client.Store
+@inject ILocalCategoryStore CategoryStore
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject CommandDispatcher Dispatcher
+@implements IDisposable
+
+<PageTitle>Categories</PageTitle>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+    <MudText Typo="Typo.h5" Style="font-family:var(--font-heading);color:var(--text-main);font-weight:600;">
+        Categories
+    </MudText>
+    <MudText Typo="Typo.body2" Style="color:var(--text-muted);">
+        @CategoryStore.Categories.Count categories
+    </MudText>
+</div>
+
+<MudGrid Spacing="2">
+    @foreach (var cat in CategoryStore.Categories.OrderBy(c => c.Order))
+    {
+        <MudItem xs="12" sm="6" md="4" lg="3">
+            <CategoryCard Category="@cat"
+                          OnEdit="@(() => OpenEditDialog(cat))"
+                          OnDelete="@(() => HandleDelete(cat))"
+                          OnCardClick="@(() => {})" />
+        </MudItem>
+    }
+
+    @* New Category card *@
+    <MudItem xs="12" sm="6" md="4" lg="3">
+        <MudCard Style="background:transparent;border-radius:var(--radius);border:2px dashed var(--border);cursor:pointer;transition:border-color var(--transition);"
+                 @onclick="OpenCreateDialog"
+                 @onmouseenter="() => _newCardHover = true"
+                 @onmouseleave="() => _newCardHover = false"
+                 Elevation="0"
+                 Class="@(_newCardHover ? "new-category-card-hover" : "")">
+            <MudCardContent Style="padding:1rem;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80px;gap:0.5rem;">
+                <MudIcon Icon="@Icons.Material.Filled.Add"
+                         Style="@($"color:{(_newCardHover ? "var(--primary)" : "var(--text-muted)")};transition:color var(--transition);")"
+                         Size="Size.Large" />
+                <MudText Typo="Typo.body2"
+                         Style="@($"color:{(_newCardHover ? "var(--primary)" : "var(--text-muted)")};transition:color var(--transition);")">
+                    New Category
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private bool _newCardHover;
+
+    protected override void OnInitialized() => CategoryStore.OnChange += StateHasChanged;
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CategoryDialog>("New Category", new DialogParameters<CategoryDialog>
+        {
+            { x => x.IsEdit, false }
+        }, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled && result.Data is CategoryDialogResult data)
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = AggregateIds.CategoryList,
+                ExpectedVersion = CategoryStore.ListVersion,
+                Type = nameof(TodoList.Domain.Commands.AddCategoryCommand),
+                Payload = JsonSerializer.SerializeToElement(new { name = data.Name, color = data.Color, icon = data.Icon }),
+                ApiEndpoint = "/categories",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = AggregateIds.CategoryList,
+                AggregateVersion = CategoryStore.ListVersion + 1,
+                Type = "CategoryAdded",
+                Payload = JsonSerializer.SerializeToElement(new { name = data.Name, color = data.Color, icon = data.Icon }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+    }
+
+    private async Task OpenEditDialog(CategorySummary cat)
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CategoryDialog>("Edit Category", new DialogParameters<CategoryDialog>
+        {
+            { x => x.IsEdit, true },
+            { x => x.InitialName, cat.Name },
+            { x => x.InitialColor, cat.Color },
+            { x => x.InitialIcon, cat.Icon }
+        }, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled && result.Data is CategoryDialogResult data)
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = AggregateIds.CategoryList,
+                ExpectedVersion = CategoryStore.ListVersion,
+                Type = nameof(TodoList.Domain.Commands.RenameCategoryCommand),
+                Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id, newName = data.Name }),
+                ApiEndpoint = $"/categories/{cat.Id}/rename",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = AggregateIds.CategoryList,
+                AggregateVersion = CategoryStore.ListVersion + 1,
+                Type = "CategoryRenamed",
+                Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id, newName = data.Name }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+    }
+
+    private async Task HandleDelete(CategorySummary cat)
+    {
+        var command = new ClientCommand
+        {
+            AggregateId = AggregateIds.CategoryList,
+            ExpectedVersion = CategoryStore.ListVersion,
+            Type = nameof(TodoList.Domain.Commands.RemoveCategoryCommand),
+            Payload = null,
+            ApiEndpoint = $"/categories/{cat.Id}",
+            HttpMethod = "DELETE",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = AggregateIds.CategoryList,
+            AggregateVersion = CategoryStore.ListVersion + 1,
+            Type = "CategoryRemoved",
+            Payload = JsonSerializer.SerializeToElement(new { categoryId = cat.Id }),
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
+    }
+
+    public void Dispose() => CategoryStore.OnChange -= StateHasChanged;
+}

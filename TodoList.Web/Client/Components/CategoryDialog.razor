@@ -1,0 +1,95 @@
+@* TodoList.Web/Client/Components/CategoryDialog.razor *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-family:var(--font-heading);">
+            @(IsEdit ? "Edit Category" : "New Category")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="Name"
+                          Label="Name"
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          RequiredError="Name is required"
+                          MaxLength="50"
+                          Immediate="true" />
+
+            <div>
+                <MudText Typo="Typo.body2" Style="color:var(--text-muted);margin-bottom:0.5rem;">Color</MudText>
+                <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                    @foreach (var preset in _presetColors)
+                    {
+                        <button @onclick="() => ColorHex = preset"
+                                style="@($"width:28px;height:28px;border-radius:4px;background:{preset};border:{(ColorHex == preset ? "3px solid white" : "2px solid transparent")};cursor:pointer;padding:0;")"
+                                title="@preset" />
+                    }
+                    <MudTextField @bind-Value="ColorHex"
+                                  Variant="Variant.Outlined"
+                                  Style="width:120px;font-family:var(--font-mono);font-size:0.8rem;"
+                                  Placeholder="#8B5CF6" />
+                </div>
+            </div>
+
+            <MudTextField @bind-Value="Icon"
+                          Label="Icon (Material Symbol name)"
+                          Variant="Variant.Outlined"
+                          Placeholder="e.g. work, person, palette"
+                          HelperText="Material Symbol icon name"
+                          Immediate="true" />
+
+            @if (!string.IsNullOrWhiteSpace(Icon))
+            {
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                    <MudText Typo="Typo.caption" Style="color:var(--text-muted);">Preview:</MudText>
+                    <span class="material-symbols-outlined" style="@($"color:{ColorHex};")">@Icon</span>
+                </div>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Style="color:var(--text-muted);">Cancel</MudButton>
+        <MudButton OnClick="Submit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(ColorHex))">
+            @(IsEdit ? "Save" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public string? InitialName { get; set; }
+    [Parameter] public string InitialColor { get; set; } = "#8B5CF6";
+    [Parameter] public string? InitialIcon { get; set; }
+
+    private string Name { get; set; } = "";
+    private string ColorHex { get; set; } = "#8B5CF6";
+    private string Icon { get; set; } = "";
+
+    private readonly string[] _presetColors = ["#8B5CF6", "#F59E0B", "#EF4444", "#0EA5E9", "#00FF9D"];
+
+    protected override void OnParametersSet()
+    {
+        Name = InitialName ?? "";
+        ColorHex = InitialColor;
+        Icon = InitialIcon ?? "";
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(ColorHex)) return;
+        MudDialog.Close(DialogResult.Ok(new CategoryDialogResult
+        {
+            Name = Name,
+            Color = ColorHex,
+            Icon = Icon
+        }));
+    }
+}

@@ -1,0 +1,52 @@
+@* TodoList.Web/Client/Layout/UserProfileStrip.razor *@
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<div style="padding: 1rem; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0.75rem;">
+    <MudAvatar Style="width:32px;height:32px;background:var(--primary);">
+        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+    </MudAvatar>
+    <div style="flex:1;min-width:0;">
+        <MudText Typo="Typo.body2" Style="color:var(--text-main);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            @(_name ?? "...")
+        </MudText>
+        <MudText Typo="Typo.caption" Style="color:var(--text-muted);">
+            @(_email ?? "")
+        </MudText>
+    </div>
+    <MudIconButton Icon="@Icons.Material.Filled.Logout"
+                   Size="Size.Small"
+                   Style="color:var(--text-muted);"
+                   OnClick="Logout" />
+</div>
+
+@code {
+    private string? _name;
+    private string? _email;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<UserProfile>("/api/me");
+            if (response is not null)
+            {
+                _name = response.Name ?? response.Email ?? "User";
+                _email = response.Email;
+            }
+        }
+        catch
+        {
+            _name = "User";
+        }
+    }
+
+    private async Task Logout()
+    {
+        await Http.PostAsync("/api/auth/logout", null);
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+
+    private record UserProfile(string? UserId, string? Email, string? Name, string? AuthMethod);
+}

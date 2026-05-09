@@ -1,0 +1,82 @@
+@* TodoList.Web/Client/Components/TaskRow.razor *@
+@using TodoList.Domain.ReadModels
+
+<MudListItem T="string" Style="@($"background:{(IsHovered ? "var(--bg-surface-hover)" : "transparent")};border-radius:var(--radius);padding:0.5rem 0.75rem;transition:background var(--transition);")"
+             @onmouseenter="() => IsHovered = true"
+             @onmouseleave="() => IsHovered = false">
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+
+        @* Checkbox *@
+        <MudCheckBox T="bool"
+                     Value="@Todo.IsCompleted"
+                     ValueChanged="OnCompletedChanged"
+                     Color="Color.Success"
+                     Style="@(Todo.IsCompleted ? "color:var(--success);" : "")" />
+
+        @* Title + metadata *@
+        <div style="flex:1;min-width:0;" class="@(Todo.IsCompleted ? "task-row--completed" : "")">
+            <MudText Typo="Typo.body1" Style="color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                @Todo.Title
+            </MudText>
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.25rem;flex-wrap:wrap;">
+                @if (Todo.CategoryName != null)
+                {
+                    <MudChip T="string"
+                             Size="Size.Small"
+                             Style="@($"background:{Todo.CategoryColor}22;color:{Todo.CategoryColor};font-family:var(--font-mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;height:18px;")">
+                        @Todo.CategoryName
+                    </MudChip>
+                }
+                @if (Todo.DueDate.HasValue)
+                {
+                    <span class="font-mono" style="@($"color:{(Todo.IsOverdue ? "var(--error)" : "var(--text-muted)")};font-size:0.7rem;display:flex;align-items:center;gap:2px;")">
+                        @if (Todo.IsOverdue)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Size="Size.Small" Style="font-size:0.8rem;" />
+                        }
+                        @Todo.DueDate.Value.ToString("MMM d")
+                    </span>
+                }
+            </div>
+            @if (Todo.Progress > 0)
+            {
+                <MudProgressLinear Value="@Todo.Progress"
+                                   Color="@(Todo.IsCompleted ? Color.Success : Color.Primary)"
+                                   Size="Size.Small"
+                                   Style="margin-top:0.375rem;border-radius:2px;" />
+            }
+        </div>
+
+        @* Status indicators *@
+        <div style="display:flex;align-items:center;gap:0.375rem;">
+            <UnsyncedDot Show="@IsUnsynced" />
+            <ConflictWarning Show="@IsConflicted" OnClick="NavigateToDetail" />
+        </div>
+
+        @* Overflow menu — visible on hover *@
+        @if (IsHovered)
+        {
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert"
+                     Size="Size.Small"
+                     Style="color:var(--text-muted);">
+                <MudMenuItem OnClick="NavigateToDetail">Edit</MudMenuItem>
+                <MudMenuItem OnClick="OnDelete" Style="color:var(--error);">Delete</MudMenuItem>
+            </MudMenu>
+        }
+    </div>
+</MudListItem>
+
+@code {
+    [Parameter, EditorRequired] public TodoSummary Todo { get; set; } = null!;
+    [Parameter] public bool IsUnsynced { get; set; }
+    [Parameter] public bool IsConflicted { get; set; }
+    [Parameter] public EventCallback<bool> OnCompletedChanged { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    private bool IsHovered { get; set; }
+
+    [Inject] private NavigationManager Nav { get; set; } = null!;
+
+    private void NavigateToDetail() => Nav.NavigateTo($"/todos/{Todo.Id}");
+}

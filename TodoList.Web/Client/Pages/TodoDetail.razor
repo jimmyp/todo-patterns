@@ -1,0 +1,343 @@
+@* TodoList.Web/Client/Pages/TodoDetail.razor *@
+@page "/todos/{Id}"
+@using System.Text.Json
+@using TodoList.Domain.ReadModels
+@using TodoList.Web.Client.Store
+@inject ILocalTodoStore TodoStore
+@inject ILocalCategoryStore CategoryStore
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject CommandDispatcher Dispatcher
+@implements IDisposable
+
+<PageTitle>@(_todo?.Title ?? "Task")</PageTitle>
+
+@if (_todo == null)
+{
+    <div style="display:flex;justify-content:center;padding:3rem;">
+        <MudText Style="color:var(--text-muted);">Task not found.</MudText>
+    </div>
+}
+else
+{
+    <div style="max-width:640px;">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.5rem;">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="@(() => Nav.NavigateTo("/"))"
+                           Style="color:var(--text-muted);" />
+            <MudText Typo="Typo.h6" Style="font-family:var(--font-heading);">
+                Task Detail
+            </MudText>
+        </div>
+
+        <MudPaper Elevation="0" Style="background:var(--bg-surface);border-radius:var(--radius);padding:1.5rem;">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_title"
+                              Label="Title"
+                              Variant="Variant.Outlined"
+                              @onblur="SaveTitle"
+                              Immediate="true" />
+
+                <MudSelect T="string"
+                           @bind-Value="_categoryId"
+                           @bind-Value:after="@(() => SaveCategory(_categoryId))"
+                           Label="Category"
+                           Variant="Variant.Outlined"
+                           Clearable="true">
+                    @foreach (var cat in CategoryStore.Categories)
+                    {
+                        <MudSelectItem T="string" Value="@cat.Id.ToString()">
+                            <div style="display:flex;align-items:center;gap:0.5rem;">
+                                <span style="@($"width:10px;height:10px;border-radius:2px;background:{cat.Color};display:inline-block;")"></span>
+                                @cat.Name
+                            </div>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudDatePicker @bind-Date="_dueDate"
+                               @bind-Date:after="@(() => SaveDueDate(_dueDate))"
+                               Label="Due date"
+                               Variant="Variant.Outlined"
+                               Clearable="true" />
+
+                <MudTextField @bind-Value="_notes"
+                              Label="Notes"
+                              Variant="Variant.Outlined"
+                              Lines="4"
+                              @onblur="SaveNotes"
+                              Immediate="true" />
+
+                <MudSlider @bind-Value="_progress"
+                           @bind-Value:after="@(() => SaveProgress(_progress))"
+                           Min="0"
+                           Max="100"
+                           Step="5"
+                           Color="Color.Primary">
+                    Progress: @_progress%
+                </MudSlider>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;padding-top:0.5rem;border-top:1px solid var(--border);">
+                    <MudText Typo="Typo.caption" Style="color:var(--text-muted);">
+                        Created @_todo.CreatedAt.ToString("MMM d, yyyy")
+                    </MudText>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Delete"
+                               OnClick="HandleDelete">
+                        Delete
+                    </MudButton>
+                </div>
+            </MudStack>
+        </MudPaper>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private TodoSummary? _todo;
+    private string _title = "";
+    private string? _categoryId;
+    private DateTime? _dueDate;
+    private string? _notes;
+    private int _progress;
+
+    protected override void OnInitialized()
+    {
+        TodoStore.OnChange += Reload;
+        Reload();
+    }
+
+    protected override void OnParametersSet() => Reload();
+
+    private void Reload()
+    {
+        if (Guid.TryParse(Id, out var guid))
+            _todo = TodoStore.GetById(guid);
+        else
+            _todo = null;
+
+        if (_todo != null)
+        {
+            _title = _todo.Title;
+            _categoryId = _todo.CategoryId?.ToString();
+            _dueDate = _todo.DueDate?.DateTime;
+            _notes = null; // Notes not in summary — would be fetched separately in real impl
+            _progress = _todo.Progress;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveTitle()
+    {
+        if (_todo == null || _title == _todo.Title) return;
+        var command = new ClientCommand
+        {
+            AggregateId = _todo.Id.ToString(),
+            ExpectedVersion = _todo.Version,
+            Type = nameof(TodoList.Domain.Commands.RenameTodoCommand),
+            Payload = JsonSerializer.SerializeToElement(new { newTitle = _title }),
+            ApiEndpoint = $"/todos/{_todo.Id}/rename",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = _todo.Id.ToString(),
+            AggregateVersion = _todo.Version + 1,
+            Type = "TodoRenamed",
+            Payload = JsonSerializer.SerializeToElement(new { newTitle = _title }),
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
+    }
+
+    private async Task SaveCategory(string? value)
+    {
+        if (_todo == null) return;
+        _categoryId = value;
+
+        if (string.IsNullOrEmpty(value))
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = _todo.Id.ToString(),
+                ExpectedVersion = _todo.Version,
+                Type = nameof(TodoList.Domain.Commands.UnassignCategoryCommand),
+                Payload = null,
+                ApiEndpoint = $"/todos/{_todo.Id}/unassign-category",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = _todo.Id.ToString(),
+                AggregateVersion = _todo.Version + 1,
+                Type = "TodoCategoryUnassigned",
+                Payload = null,
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+        else
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = _todo.Id.ToString(),
+                ExpectedVersion = _todo.Version,
+                Type = nameof(TodoList.Domain.Commands.AssignCategoryCommand),
+                Payload = JsonSerializer.SerializeToElement(new { categoryId = value }),
+                ApiEndpoint = $"/todos/{_todo.Id}/assign-category",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = _todo.Id.ToString(),
+                AggregateVersion = _todo.Version + 1,
+                Type = "TodoCategoryAssigned",
+                Payload = JsonSerializer.SerializeToElement(new { categoryId = value }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+    }
+
+    private async Task SaveDueDate(DateTime? value)
+    {
+        if (_todo == null) return;
+        _dueDate = value;
+
+        if (value == null)
+        {
+            var command = new ClientCommand
+            {
+                AggregateId = _todo.Id.ToString(),
+                ExpectedVersion = _todo.Version,
+                Type = nameof(TodoList.Domain.Commands.ClearDueDateCommand),
+                Payload = null,
+                ApiEndpoint = $"/todos/{_todo.Id}/clear-due-date",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = _todo.Id.ToString(),
+                AggregateVersion = _todo.Version + 1,
+                Type = "TodoDueDateCleared",
+                Payload = null,
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+        else
+        {
+            var dueDate = new DateTimeOffset(value.Value, TimeSpan.Zero);
+            var command = new ClientCommand
+            {
+                AggregateId = _todo.Id.ToString(),
+                ExpectedVersion = _todo.Version,
+                Type = nameof(TodoList.Domain.Commands.SetDueDateCommand),
+                Payload = JsonSerializer.SerializeToElement(new { dueDate }),
+                ApiEndpoint = $"/todos/{_todo.Id}/set-due-date",
+                Timestamp = DateTimeOffset.UtcNow
+            };
+            var speculativeEvent = new ClientEvent
+            {
+                AggregateId = _todo.Id.ToString(),
+                AggregateVersion = _todo.Version + 1,
+                Type = "TodoDueDateSet",
+                Payload = JsonSerializer.SerializeToElement(new { dueDate }),
+                Timestamp = DateTimeOffset.UtcNow,
+                Source = EventSource.Client,
+                State = EventState.Speculative
+            };
+            await Dispatcher.Dispatch(command, speculativeEvent);
+        }
+    }
+
+    private async Task SaveNotes()
+    {
+        if (_todo == null) return;
+        var command = new ClientCommand
+        {
+            AggregateId = _todo.Id.ToString(),
+            ExpectedVersion = _todo.Version,
+            Type = nameof(TodoList.Domain.Commands.UpdateNotesCommand),
+            Payload = JsonSerializer.SerializeToElement(new { notes = _notes }),
+            ApiEndpoint = $"/todos/{_todo.Id}/update-notes",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = _todo.Id.ToString(),
+            AggregateVersion = _todo.Version + 1,
+            Type = "TodoNotesUpdated",
+            Payload = JsonSerializer.SerializeToElement(new { notes = _notes }),
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
+    }
+
+    private async Task SaveProgress(int value)
+    {
+        if (_todo == null) return;
+        var command = new ClientCommand
+        {
+            AggregateId = _todo.Id.ToString(),
+            ExpectedVersion = _todo.Version,
+            Type = nameof(TodoList.Domain.Commands.UpdateProgressCommand),
+            Payload = JsonSerializer.SerializeToElement(new { progress = value }),
+            ApiEndpoint = $"/todos/{_todo.Id}/update-progress",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = _todo.Id.ToString(),
+            AggregateVersion = _todo.Version + 1,
+            Type = "TodoProgressUpdated",
+            Payload = JsonSerializer.SerializeToElement(new { progress = value }),
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
+    }
+
+    private async Task HandleDelete()
+    {
+        if (_todo == null) return;
+        var command = new ClientCommand
+        {
+            AggregateId = _todo.Id.ToString(),
+            ExpectedVersion = _todo.Version,
+            Type = nameof(TodoList.Domain.Commands.DeleteTodoCommand),
+            Payload = null,
+            ApiEndpoint = $"/todos/{_todo.Id}",
+            HttpMethod = "DELETE",
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        var speculativeEvent = new ClientEvent
+        {
+            AggregateId = _todo.Id.ToString(),
+            AggregateVersion = _todo.Version + 1,
+            Type = "TodoDeleted",
+            Payload = null,
+            Timestamp = DateTimeOffset.UtcNow,
+            Source = EventSource.Client,
+            State = EventState.Speculative
+        };
+        await Dispatcher.Dispatch(command, speculativeEvent);
+        Nav.NavigateTo("/");
+    }
+
+    public void Dispose() => TodoStore.OnChange -= Reload;
+}

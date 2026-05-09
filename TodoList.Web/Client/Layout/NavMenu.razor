@@ -1,0 +1,17 @@
+@* TodoList.Web/Client/Layout/NavMenu.razor *@
+@inject NavigationManager Nav
+
+<MudNavMenu>
+    <MudNavLink Href="/"
+                Match="NavLinkMatch.All"
+                Icon="@Icons.Material.Filled.CheckCircle"
+                IconColor="Color.Primary">
+        Todo List
+    </MudNavLink>
+    <MudNavLink Href="/categories"
+                Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.Category"
+                IconColor="Color.Primary">
+        Categories
+    </MudNavLink>
+</MudNavMenu>
